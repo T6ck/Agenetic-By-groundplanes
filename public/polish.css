@@ -30,20 +30,15 @@ html body.mindspace #content .community-shell>.community-compose{position:sticky
 
 .model-row{gap:16px;align-items:center}.model-row>div{min-width:0}.model-row strong,.model-row a{overflow-wrap:anywhere}.model-row a{text-decoration:underline;text-underline-offset:3px}.model-row button{flex-shrink:0}.model-inspection{margin-top:24px;padding-top:24px;border-top:1px solid var(--line)}.model-runtime-status{font-size:13px}.model-search{align-items:end}@media(max-width:760px){.model-row{flex-wrap:wrap}.model-search{flex-wrap:wrap}}
 
-.setup-brand-art {
-  display: block;
-  width: 100%;
-  max-width: 150px;
-  height: auto;
-  margin-bottom: 18px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
+/* Keep layout controls accessible when the graph footer runs out of room. */
+.graph-navigation { flex: 0 0 auto; }
+.graph-navigation button[data-network="fit"],
+.graph-navigation button[data-network="arrange"] {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
 }
-@media (max-width: 650px) {
-  .setup-brand-art {
-    float: right;
-    width: 44px;
-    margin: 0 0 0 14px;
-    border-radius: 8px;
-  }
+@media (max-width: 1080px) {
+  .network-footer { flex-wrap: wrap; justify-content: flex-start; gap: 6px 10px; }
 }

@@ -85,12 +85,112 @@ function networkData() {
   const ids=new Set(nodes.map(n=>n.id));links=links.filter(l=>ids.has(l.from)&&ids.has(l.to));
   return {nodes,links};
 }
+function organizedGraphPositions(nodes, links) {
+  const compare = (a,b) => a.localeCompare(b,'en');
+  const records = new Map(nodes.map(node=>[node.id,node]));
+  const neighbors = new Map(nodes.map(node=>[node.id,new Set()]));
+  for (const {from,to} of links) {
+    if (from===to || !neighbors.has(from) || !neighbors.has(to)) continue;
+    neighbors.get(from).add(to);
+    neighbors.get(to).add(from);
+  }
+  const priority = {agent:0,task:1,file:2,model:3};
+  const linkedFirst = (a,b) => neighbors.get(b).size-neighbors.get(a).size ||
+    (priority[records.get(a).kind]??4)-(priority[records.get(b).kind]??4) ||
+    compare(records.get(a).name,records.get(b).name) || compare(a,b);
+  const visited = new Set(), components = [], isolated = [];
+  for (const id of [...records.keys()].sort(linkedFirst)) {
+    if (visited.has(id)) continue;
+    if (!neighbors.get(id).size) {
+      isolated.push(id);
+      visited.add(id);
+      continue;
+    }
+    const group = [id];
+    visited.add(id);
+    for (let index=0;index<group.length;index++) {
+      for (const next of [...neighbors.get(group[index])].sort(linkedFirst)) {
+        if (!visited.has(next)) {visited.add(next);group.push(next);}
+      }
+    }
+    components.push(group);
+  }
+  components.sort((a,b)=>b.length-a.length||linkedFirst(a[0],b[0]));
+  if (isolated.length) components.push(isolated);
+
+  const dx=245,dy=105,gap=170;
+  const targetWidth=Math.max(900,Math.sqrt(Math.max(1,nodes.length)*dx*dy)*1.5);
+  let x=0,y=0,rowHeight=0;
+  const positions=new Map();
+  for (const group of components) {
+    const columns=Math.min(group.length,Math.max(1,Math.ceil(Math.sqrt(group.length*.72))));
+    const width=columns*dx;
+    const height=Math.ceil(group.length/columns)*dy;
+    if (x && x+width>targetWidth) {x=0;y+=rowHeight+gap;rowHeight=0;}
+    group.forEach((id,index)=>positions.set(id,[x+(index%columns)*dx,y+Math.floor(index/columns)*dy]));
+    x+=width+gap;
+    rowHeight=Math.max(rowHeight,height);
+  }
+  return positions;
+}
+
+let arrangingGraph = false;
+async function changeGraphArrangement(undo=false){
+  if (arrangingGraph) return;
+  const workspace=activeSpace();
+  const previous={positions:workspace.graphPositions,camera:workspace.graphCamera,undo:workspace.graphArrangeUndo};
+  const next=new Map(network.positions);
+  if (undo) {
+    if (!previous.undo) return;
+    workspace.graphPositions={...Object.fromEntries(next),...previous.undo.positions};
+    workspace.graphCamera=previous.undo.camera;
+    workspace.graphArrangeUndo=null;
+  } else {
+    const {nodes,links}=networkData();
+    if (nodes.length<2) return fitNetwork();
+    workspace.graphArrangeUndo={positions:Object.fromEntries(next),camera:{...network.camera}};
+    for (const [id,point] of organizedGraphPositions(nodes,links)) next.set(id,point);
+    workspace.graphPositions=Object.fromEntries(next);
+  }
+  arrangingGraph=true;
+  try {await save();}
+  catch (error) {
+    workspace.graphPositions=previous.positions;
+    workspace.graphCamera=previous.camera;
+    workspace.graphArrangeUndo=previous.undo;
+    throw new Error('Could not save the graph layout.',{cause:error});
+  } finally {arrangingGraph=false;}
+  if (activeSpace()!==workspace) return;
+  network.positions=new Map(Object.entries(workspace.graphPositions));
+  network.signature='';
+  if (undo) network.camera={...workspace.graphCamera};
+  network.needFit=!undo;
+  render();
+  toast(undo?'Previous arrangement restored.':'Visible nodes organized. Drag any node to fine-tune the layout.');
+}
+
 function calculateNetwork(force=false) {
   const nodes=spaceNodes(),links=studioLinks();
   const signature=activeSpace().id+'|'+nodes.map(n=>n.id).join(',')+'|'+links.map(connectionKey).join(',');
   if(signature===network.signature&&!force)return;
   network.signature=signature;
   const saved=activeSpace().graphPositions||{};
+  // Keep manual placements for large graphs without running a full force simulation.
+  if (nodes.length > 180) {
+    const placed=organizedGraphPositions(nodes,links);
+    const old=new Map();
+    let maximumY=0;
+    for (const node of nodes) {
+      const point=saved[node.id]||network.positions.get(node.id);
+      if (!point) continue;
+      old.set(node.id,point);
+      maximumY=Math.max(maximumY,point[1]);
+    }
+    const offset=old.size?maximumY+160:0;
+    for (const [id,point] of placed) if (!old.has(id)) old.set(id,[point[0],point[1]+offset]);
+    network.positions=old;
+    return;
+  }
   const degree=new Map(nodes.map(n=>[n.id,0]));
   for(const l of links){degree.set(l.from,degree.get(l.from)+1);degree.set(l.to,degree.get(l.to)+1)}
   const order=[...nodes].sort((a,b)=>degree.get(b.id)-degree.get(a.id));
@@ -138,13 +238,14 @@ function networkNode(n,links) {
 }
 
 function renderNetwork() {
-  ensureStudio();applyAppearance();calculateNetwork();
+  ensureStudio();applyAppearance();
   const space=activeSpace();
   if(!space.graphLayoutVersion&&!Object.keys(space.graphPositions||{}).length){delete space.graphCamera;space.graphLayoutVersion=2;network.needFit=true}
   if(network.space!==space.id) {
-    network.space=space.id;network.camera=space.graphCamera||{x:0,y:0,scale:1};network.needFit=!space.graphCamera;
+    network.positions.clear();network.signature='';network.space=space.id;network.camera=space.graphCamera||{x:0,y:0,scale:1};network.needFit=!space.graphCamera;
     const options=space.graphSettings||{};network.labels=options.labels||'auto';network.nodeScale=options.nodeScale||1;network.edgeOpacity=options.edgeOpacity??.35;
   }
+  calculateNetwork();
   document.body.classList.add('mindspace','knowledge-mode');document.body.classList.remove('studio','immersive');
   const {nodes,links}=networkData();
   if(network.previousCount===0&&nodes.length)network.needFit=true;network.previousCount=nodes.length;
@@ -156,9 +257,11 @@ function renderNetwork() {
   }).join('')+'</div><div class="knowledge-explorer-footer">'+studioButton('import',lineIcon('folder')+'Import files')+studioButton('runtime',lineIcon('model')+'Local models')+networkButton('example',lineIcon('graph')+'Explore example space')+'</div></aside>'+
   '<main class="network-stage" tabindex="-1" aria-label="Knowledge graph"><div class="grid-field" aria-hidden="true"></div><div class="network-context"><span>'+ (selected?'LOCAL GRAPH':'KNOWLEDGE GRAPH')+'</span><h1>'+esc(selected?selected.name.replace(/\.md$/,''):space.name)+'</h1><p id="graph-count">'+nodes.length+' nodes <span>·</span> '+links.length+' connections</p>'+(selected?'<div class="depth-control">'+networkButton('depth','1 hop','1','class="'+(network.depth===1?'active':'')+'"')+networkButton('depth','2 hops','2','class="'+(network.depth===2?'active':'')+'"')+networkButton('all','Clear focus')+'</div>':'')+'</div><svg class="knowledge-svg" aria-label="Notes, agents, and workflow relationships">'+orbDefinitions()+'<g class="network-world"><g class="network-edges">'+links.map(l=>{const a=network.positions.get(l.from),b=network.positions.get(l.to);return '<line class="knowledge-edge '+l.kind+'" data-source="'+esc(l.from)+'" data-target="'+esc(l.to)+'" x1="'+a[0]+'" y1="'+a[1]+'" x2="'+b[0]+'" y2="'+b[1]+'"/>'}).join('')+'</g><g class="network-nodes">'+nodes.map(n=>networkNode(n,links)).join('')+'</g></g></svg>'+
   (!nodes.length?'<div class="graph-empty"><h2>'+ (spaceNodes().length?'Nothing matches this view':'Your ideas start here')+'</h2><p>'+(spaceNodes().length?'Try another search or restore your filters.':'Drop your files into this space, write a note, or explore the example. Connections appear as you link real material.')+'</p>'+(spaceNodes().length?networkButton('reset','Reset filters'):studioButton('import','Import files')+studioButton('note','Write a note')+networkButton('example','Explore example'))+'</div>':'')+
-  '<div class="edge-key" aria-label="Relationship legend"><span><i></i>Reference / wiki link</span><span><i></i>Context / assignment / model</span></div><div class="network-footer"><div class="type-filters" aria-label="Filter node types">'+['file','agent','task','model'].map(kind=>networkButton('type','<i class="type-dot '+kind+'"></i>'+({file:'Knowledge',agent:'Agents',task:'Workflow',model:'Models'}[kind]),kind,'aria-pressed="'+network.types.has(kind)+'"')).join('')+'</div><div class="graph-navigation">'+networkButton('zoom-out',lineIcon('minus'),'','aria-label="Zoom out"')+'<span id="network-zoom"></span>'+networkButton('zoom-in',lineIcon('plus'),'','aria-label="Zoom in"')+networkButton('fit',lineIcon('fit'),'','aria-label="Fit graph"')+'</div></div></main><div class="network-add">'+studioButton('note',lineIcon('note')+'Note')+studioButton('agent',lineIcon('agent')+'Agent')+studioButton('task',lineIcon('task')+'Step')+'</div>'+
+  '<div class="edge-key" aria-label="Relationship legend"><span><i></i>Reference / wiki link</span><span><i></i>Context / assignment / model</span></div><div class="network-footer"><div class="type-filters" aria-label="Filter node types">'+['file','agent','task','model'].map(kind=>networkButton('type','<i class="type-dot '+kind+'"></i>'+({file:'Knowledge',agent:'Agents',task:'Workflow',model:'Models'}[kind]),kind,'aria-pressed="'+network.types.has(kind)+'"')).join('')+'</div><div class="graph-navigation">'+networkButton('zoom-out',lineIcon('minus'),'','aria-label="Zoom out"')+'<span id="network-zoom"></span>'+networkButton('zoom-in',lineIcon('plus'),'','aria-label="Zoom in"')+networkButton('fit',lineIcon('fit')+'<span>Center</span>','','title="Center visible nodes · F"')+
+  networkButton('arrange',lineIcon('canvas')+'<span>Organize</span>','','title="Organize visible nodes by connections"')+
+  (space.graphArrangeUndo?networkButton('undo-arrange',lineIcon('undo'),'','aria-label="Undo graph organization" title="Undo organization"'):'')+'</div></div></main><div class="network-add">'+studioButton('note',lineIcon('note')+'Note')+studioButton('agent',lineIcon('agent')+'Agent')+studioButton('task',lineIcon('task')+'Step')+'</div>'+
   '<aside id="space-inspector" hidden></aside><aside id="space-library" hidden></aside>'+
-  (network.settings?'<section class="graph-settings"><div class="floating-heading"><h2>Graph settings</h2>'+networkButton('filters',lineIcon('close'),'','aria-label="Close graph settings"')+'</div><label>Labels<select id="graph-labels" aria-label="Graph labels">'+['auto','always','off'].map(v=>'<option value="'+v+'" '+(network.labels===v?'selected':'')+'>'+({auto:'Visible by default',always:'Always visible',off:'Selection only'}[v])+'</option>').join('')+'</select></label><label>Node size<input id="graph-size" type="range" min="0.6" max="1.8" step="0.1" value="'+network.nodeScale+'"></label><label>Edge visibility<input id="graph-edges" type="range" min="0.08" max="0.65" step="0.01" value="'+network.edgeOpacity+'"></label><p>Node size reflects the number of connections. Drag a node to place it.</p>'+networkButton('arrange','Arrange by relationships')+'</section>':'')+
+  (network.settings?'<section class="graph-settings"><div class="floating-heading"><h2>Graph settings</h2>'+networkButton('filters',lineIcon('close'),'','aria-label="Close graph settings"')+'</div><label>Labels<select id="graph-labels" aria-label="Graph labels">'+['auto','always','off'].map(v=>'<option value="'+v+'" '+(network.labels===v?'selected':'')+'>'+({auto:'Visible by default',always:'Always visible',off:'Selection only'}[v])+'</option>').join('')+'</select></label><label>Node size<input id="graph-size" type="range" min="0.6" max="1.8" step="0.1" value="'+network.nodeScale+'"></label><label>Edge visibility<input id="graph-edges" type="range" min="0.08" max="0.65" step="0.01" value="'+network.edgeOpacity+'"></label><p>Node size reflects the number of connections. Drag a node to place it.</p>'+networkButton('arrange','Organize visible nodes')+'</section>':'')+
   appearancePanel()+'<div id="connect-banner" '+(!studio.connecting?'hidden':'')+'>Choose a node to connect'+studioButton('cancel','Cancel')+'</div>';
   drawInspector();applyNetworkCamera();highlightNetwork();
   if(network.needFit){network.needFit=false;requestAnimationFrame(fitNetwork)}
@@ -216,17 +319,27 @@ function fitNetwork() {
   const stage=$('.network-stage');if(!stage)return;
   const {nodes}=networkData(),bounds=stage.getBoundingClientRect();
   if(!nodes.length)return;
-  const points=nodes.map(n=>network.positions.get(n.id));
-  const minX=Math.min(...points.map(p=>p[0])),maxX=Math.max(...points.map(p=>p[0]));
-  const minY=Math.min(...points.map(p=>p[1])),maxY=Math.max(...points.map(p=>p[1]));
-  const labelRoom=220;
-  const width=Math.max(300,maxX-minX+labelRoom),height=Math.max(230,maxY-minY+140);
-  const scale=Math.max(.1,Math.min(1.5,(bounds.width-260)/width,(bounds.height-280)/height));
-  network.camera={x:bounds.width/2-(minX+maxX+80)/2*scale,y:145+(bounds.height-240)/2-(minY+maxY)/2*scale,scale};
+  let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+  for (const node of nodes) {
+    const point=network.positions.get(node.id);
+    if (!point || !point.every(Number.isFinite)) continue;
+    const [x,y]=point;
+    minX=Math.min(minX,x-35);maxX=Math.max(maxX,x+190);
+    minY=Math.min(minY,y-35);maxY=Math.max(maxY,y+35);
+  }
+  if (!Number.isFinite(minX)) return;
+  const top=Math.min(160,bounds.height*.25),bottom=Math.min(80,bounds.height*.18);
+  const availableWidth=Math.max(1,bounds.width-48),availableHeight=Math.max(1,bounds.height-top-bottom);
+  const scale=Math.max(.04,Math.min(1.4,availableWidth/(maxX-minX),availableHeight/(maxY-minY)));
+  network.camera={
+    x:bounds.width/2-(minX+maxX)*scale/2,
+    y:top+availableHeight/2-(minY+maxY)*scale/2,
+    scale
+  };
   applyNetworkCamera();persistNetwork();
 }
 function zoomNetwork(factor,x,y) {
-  const c=network.camera,scale=Math.max(.08,Math.min(3,c.scale*factor));
+  const c=network.camera,scale=Math.max(.04,Math.min(3,c.scale*factor));
   network.camera={x:x-(x-c.x)*scale/c.scale,y:y-(y-c.y)*scale/c.scale,scale};applyNetworkCamera();
 }
 function highlightNetwork() {
@@ -303,7 +416,7 @@ async function networkAction(action,key) {
   if(action==='type'){if(network.types.has(key))network.types.delete(key);else network.types.add(key);render();return}
   if(action==='filters'){network.settings=!network.settings;if(network.settings)studio.inspector=false;render();return}
   if(action==='fit'){fitNetwork();return}
-  if(action==='arrange'){network.positions.clear();calculateNetwork(true);activeSpace().graphPositions=Object.fromEntries(network.positions);await save();network.needFit=true;render();return}
+  if(action==='arrange'||action==='undo-arrange')return changeGraphArrangement(action==='undo-arrange');
   if(action==='zoom-in'||action==='zoom-out'){const b=$('.network-stage').getBoundingClientRect();zoomNetwork(action==='zoom-in'?1.2:1/1.2,b.width/2,b.height/2);persistNetwork()}
 }
 document.addEventListener('click',e=>{

@@ -25,9 +25,11 @@ function ensureStudio() {
   if(example?.name==='Dendral · Example')example.name='Agenetic · Example';
   const space=activeSpace();space.groups??=[];space.positions??={};
   const nodes=spaceNodes();
+  const counts=new Map();
   for(const [i,n] of nodes.entries()) {
+    const same=counts.get(n.kind)||0;
+    counts.set(n.kind,same+1);
     if(space.positions[n.id])continue;
-    const same=nodes.filter(x=>x.kind===n.kind).findIndex(x=>x.id===n.id);
     const layouts={file:[100+(same%2)*310,130+Math.floor(same/2)*280],agent:[850,130+same*280],task:[1240,130+same*280],model:[850,-170+same*280]};
     space.positions[n.id]=space.id==='home'?(data.positions?.[n.id]||layouts[n.kind]):[100+(i%3)*310,130+Math.floor(i/3)*280];
   }

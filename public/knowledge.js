@@ -403,6 +403,15 @@ function normalizeIcons() {
   for(const el of document.querySelectorAll('.connection-port'))el.innerHTML=lineIcon('plus');
 }
 async function networkAction(action,key) {
+  // Camera controls do not change the editor or require a valid note.
+  if(action==='fit'){fitNetwork();return}
+  if(action==='zoom-in'||action==='zoom-out'){
+    const stage=$('.network-stage');if(!stage)return;
+    const bounds=stage.getBoundingClientRect();
+    zoomNetwork(action==='zoom-in'?1.2:1/1.2,bounds.width/2,bounds.height/2);
+    persistNetwork();
+    return;
+  }
   if(!await saveEditor())return;
   if(action==='graph'||action==='canvas') {
     activeSpace().viewMode=action;network.needFit=action==='graph'&&!activeSpace().graphCamera;studio.inspector=false;studio.selected.clear();await save();render();return;
@@ -415,9 +424,7 @@ async function networkAction(action,key) {
   if(action==='depth'){network.depth=Number(key);network.needFit=true;render();return}
   if(action==='type'){if(network.types.has(key))network.types.delete(key);else network.types.add(key);render();return}
   if(action==='filters'){network.settings=!network.settings;if(network.settings)studio.inspector=false;render();return}
-  if(action==='fit'){fitNetwork();return}
   if(action==='arrange'||action==='undo-arrange')return changeGraphArrangement(action==='undo-arrange');
-  if(action==='zoom-in'||action==='zoom-out'){const b=$('.network-stage').getBoundingClientRect();zoomNetwork(action==='zoom-in'?1.2:1/1.2,b.width/2,b.height/2);persistNetwork()}
 }
 document.addEventListener('click',e=>{
   const action=e.target.closest('[data-network]');if(action){networkAction(action.dataset.network,action.dataset.key).catch(report);return}
@@ -449,8 +456,7 @@ document.addEventListener('pointermove',e=>{
       if(edge.dataset.source===d.id){edge.setAttribute('x1',p[0]);edge.setAttribute('y1',p[1])}
       if(edge.dataset.target===d.id){edge.setAttribute('x2',p[0]);edge.setAttribute('y2',p[1])}
     }
-  $('.network-stage').style.setProperty('--grid-x',(c.x*.12)+'px');$('.network-stage').style.setProperty('--grid-y',(c.y*.12)+'px');
-  placeNetworkLabels();
+    placeNetworkLabels();
   } else {network.camera.x=d.camera.x+dx;network.camera.y=d.camera.y+dy;applyNetworkCamera()}
 });
 document.addEventListener('pointerup',()=>{

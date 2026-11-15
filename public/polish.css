@@ -30,6 +30,9 @@ html body.mindspace #content .community-shell>.community-compose{position:sticky
 
 .model-row{gap:16px;align-items:center}.model-row>div{min-width:0}.model-row strong,.model-row a{overflow-wrap:anywhere}.model-row a{text-decoration:underline;text-underline-offset:3px}.model-row button{flex-shrink:0}.model-inspection{margin-top:24px;padding-top:24px;border-top:1px solid var(--line)}.model-runtime-status{font-size:13px}.model-search{align-items:end}@media(max-width:760px){.model-row{flex-wrap:wrap}.model-search{flex-wrap:wrap}}
 
+/* The positioned graph SVG sits at z-index 1. Keep controls above its click surface. */
+.network-stage { isolation: isolate; }
+.network-stage > .network-footer { z-index: 3; }
 /* Keep layout controls accessible when the graph footer runs out of room. */
 .graph-navigation { flex: 0 0 auto; }
 .graph-navigation button[data-network="fit"],

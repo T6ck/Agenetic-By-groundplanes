@@ -201,22 +201,82 @@ async function groupSelection() {
   if(studio.selected.size<2){toast('Shift-click cards or Shift-drag a selection, then group them.');return}
   modal('Group selected cards','<form id="new-group"><label class="field">Group name<input name="name" placeholder="Research, planning, or a workflow…" required maxlength="80"></label><button class="primary">Create group</button></form>');
 }
-async function executeStep(id) {
-  if(!await saveEditor())return;
-  const task=data.tasks.find(t=>t.id===id),agent=data.agents.find(a=>a.id===task?.agent);
-  if(!agent){toast('Assign an agent to this step first.');return}
-  const model=data.models.find(m=>m.id===agent.model);
-  if(!model){toast('Assign a local model to the agent first.');return}
-  if(!token){act('connect');return}
-  if(running){toast('A local task is already running.');return}
-  modal(esc(task.name),'<p>Running with '+esc(agent.name)+' on your device.</p><pre id="step-output" class="output" role="status">Starting local inference…</pre>');
-  running=true;
+function evidenceWorkflow(target){
+ const space = activeSpace();
+ const members = new Set(space.members);
+ const hidden = new Set(space.hidden || []);
+ const tasks = new Map(data.tasks.filter(task => !hidden.has(task.id) &&
+  (space.id === 'home' ? data.profile?.demo || !task.sample : members.has(task.id))).map(task => [task.id, task]));
+ const upstream = new Map();
+ for (const {from, to} of data.links || []) {
+  if (!tasks.has(from) || !tasks.has(to)) continue;
+  if (!upstream.has(to)) upstream.set(to, []);
+  upstream.get(to).push(from);
+ }
+ const visiting = new Set(), completed = new Set(), ordered = [];
+ function visit(id){
+  if (completed.has(id)) return;
+  if (visiting.has(id)) throw new Error('Remove the circular connection between workflow steps.');
+  if (!tasks.has(id)) throw new Error('Open the workspace containing this step.');
+  if (visiting.size + completed.size >= 12) throw new Error('This branch exceeds the 12-step run limit. Run it in smaller sections.');
+  visiting.add(id);
+  for (const dependency of upstream.get(id) || []) visit(dependency);
+  visiting.delete(id);
+  completed.add(id);
+  ordered.push(tasks.get(id));
+ }
+ visit(target);
+ return ordered;
+}
+
+async function executeStep(id){
+ if (!await saveEditor()) return;
+ if (running) {toast('A local task is already running.');return;}
+ let steps;
+ try {steps = evidenceWorkflow(id);}
+ catch (error) {report(error);return;}
+ const task = steps.at(-1);
+ const draftAgent = data.agents.find(agent => agent.id === task.agent);
+ const list = steps.map(item => '<li>'+esc(item.name)+'</li>').join('');
+ modal(esc(task.name), '<p>Run these steps in dependency order using exact excerpts. Each step reads only notes connected to its assigned agent or to the step itself. Arrows point from prerequisite to dependent step. Matching saved evidence is reused.</p>'+
+  '<ol>'+list+'</ol><label class="setup-check"><input type="checkbox" id="step-follow"> Follow one hop from connected notes</label>'+
+  '<button type="button" class="primary" id="step-run">Run evidence workflow</button>'+
+  (draftAgent?'<button type="button" id="step-draft">Open model draft</button>':'')+'<p id="step-status" role="status"></p><pre id="step-output" class="output"></pre>');
+ const button = $('#step-run'), status = $('#step-status'), output = $('#step-output');
+ const dialog = $('#dialog');
+ const draft = $('#step-draft');
+ if (draft) draft.onclick = () => {if (!running) showAgent(draftAgent, task);};
+ const workspace = activeSpace().id, record = data;
+ button.onclick = async () => {
+  if (running) {status.textContent = 'Wait for the active run.';return;}
+  const follow = $('#step-follow').checked;
+  const results = [];
+  running = true;
+  button.disabled = true;
   try {
-    const result=await localModelRequest({model:model.name,model_source:model.source||null,role:agent.role,instructions:agent.task,task:task.description,context:chooseContext(agent,task.description)},{agent:agent.id,label:task.name});
-    if($('#step-output'))$('#step-output').textContent=result.output;
-    await commitStudio(()=>{task.output=result.output;task.status='complete';log(task.name,'Workflow step completed','Agents');data.logs[0].run=true});
-  } catch(error){if($('#step-output'))$('#step-output').textContent=error.message;else toast(error.message)}
-  finally{running=false}
+   for (const item of steps) {
+    if (!dialog.open || !button.isConnected || data !== record || activeSpace().id !== workspace) {
+     throw new Error('Workflow stopped. Finished steps remain saved.');
+    }
+    status.textContent = 'Checking evidence for '+item.name+'…';
+    const agent = data.agents.find(candidate => candidate.id === item.agent);
+    if (!agent) throw new Error('Assign an agent to '+item.name+' before continuing.');
+    const scope = agentSourceScope(agent, item, follow || agent.followLinkedNotes);
+    const selection = selectContext(scope, item.description || agent.task, true);
+    if (!selection.quotes?.length) throw new Error(item.name+': no matching evidence. Attach a relevant note or revise the task.');
+    const result = await saveAgentEvidence(agent, item.description || agent.task, selection, scope, item);
+    results.push(item.name+(result.reused?' · reused':' · saved')+'\n'+result.output);
+    output.textContent = results.join('\n\n');
+   }
+   status.textContent = 'Evidence workflow complete.';
+  } catch (error) {
+   status.textContent = error.message;
+   if (!status.isConnected) toast(error.message);
+  } finally {
+   running = false;
+   button.disabled = false;
+  }
+ };
 }
 async function studioCommand(action,id) {
   if(!await saveEditor())return;

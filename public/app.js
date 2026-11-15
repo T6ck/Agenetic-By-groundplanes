@@ -61,12 +61,99 @@ function render(){
 function modal(title,html){const d=$('#dialog');d.innerHTML=header(title,'',btn('close','Close'))+'<div class="pad">'+html+'</div>';if(!d.open)d.showModal()}
 function download(value,name,type='text/plain'){const url=URL.createObjectURL(value instanceof Blob?value:new Blob([value],{type}));const a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000)}
 async function ingest(files,kind){const models=kind==='Models', items=[];let skippedModel=false;for(const file of files){if(!models&&/\.gguf$/i.test(file.name)){skippedModel=true;continue;}if(models){const bytes=new Uint8Array(await file.slice(0,4).arrayBuffer());if(!/\.gguf$/i.test(file.name)||String.fromCharCode(...bytes)!=='GGUF'){toast('Choose a valid GGUF model file.');continue}}const item={id:crypto.randomUUID(),name:file.name,size:file.size};if(!models&&file.size<=2e6&&(/\.(txt|md|markdown|csv|tsv|json|jsonl|log|ya?ml|xml|toml|ini|rst)$/i.test(file.name)||file.type.startsWith('text/')))item.text=await file.text();items.push([item,file])}if(!items.length){if(skippedModel)toast('Open Local models and choose Existing GGUF to add model weights.');return;}if(await change(()=>{const group=models?data.models:data.files;for(const [item] of items){group.push(item);if(data.spaces&&activeSpace())activeSpace().members.push(item.id);log(item.name,models?'Model registered':'File imported',kind)}},models?[]:items.map(([item,file])=>[item.id,file])))toast(items.length+(items.length===1?' item added':' items added')+' to this workspace.'+(skippedModel?' Open Local models for GGUF files.':''))}
-function agentForm(a={}){modal(a.id?'Edit agent':'Set up an agent','<form id="agentForm" data-id="'+esc(a.id)+'"><label class="field">Agent name<input name="name" maxlength="60" required value="'+esc(a.name)+'"></label><label class="field">Role<input name="role" maxlength="80" required value="'+esc(a.role)+'" placeholder="Research analyst"></label><label class="field">Default task and instructions<textarea name="task" required maxlength="5000" placeholder="Explain what the agent should do and how to format its output.">'+esc(a.task)+'</textarea></label><label class="field">Local model<select name="model"><option value="">Choose later</option>'+data.models.map(m=>'<option value="'+esc(m.id)+'" '+(m.id===a.model?'selected':'')+'>'+esc(m.name)+'</option>').join('')+'</select></label><fieldset><legend>Knowledge for this agent</legend><small>Selected text is retrieved at run time. Model weights are unchanged.</small>'+data.files.filter(f=>typeof f.text==='string').map(f=>'<label><input type="checkbox" name="files" value="'+esc(f.id)+'" '+(a.files?.includes(f.id)?'checked':'')+'> '+esc(f.name)+'</label>').join('')+'</fieldset><button class="primary" type="submit">Save agent setup</button></form>')}
-function showAgent(a){const m=data.models.find(m=>m.id===a.model), attached=new Set(a.files);modal(esc(a.name),'<p>'+esc(a.role)+' · '+(m?esc(m.name):'Model not assigned')+'</p><h3>Default task</h3><p>'+esc(a.task)+'</p><h3>Knowledge</h3><p>'+ (data.files.filter(f=>attached.has(f.id)).slice(0,12).map(f=>esc(f.name)).join(', ')+(attached.size>12?' · '+attached.size+' attached':'')||'No files attached.')+'</p><div class="actions">'+btn('edit','Edit setup',a.id)+btn('deleteAgent','Remove agent',a.id)+'</div>'+(m?'<form id="runForm" data-id="'+esc(a.id)+'"><label class="field">Task for this run<textarea name="task" maxlength="5000" required>'+esc(a.task)+'</textarea></label><label class="field">Run profile<select name="profile"><option value="quick">Quick · short answer, lower memory</option><option value="balanced">Balanced · more context and detail</option><option value="extended">Extended · larger context and longer output</option></select></label><p class="policy-detail">Hardware checks stay on this device. This run uses the task and attached notes. '+(!attached.size?'Attach sources for an evidence-based answer. ':'')+'Web search is not part of a local agent run.</p><div class="actions"><button type="submit" class="primary">Run locally</button><button type="button" data-stop-agent hidden>Stop run</button></div><div id="runProgress" role="status"></div><div id="runOutput"></div></form>':'<p>Assign a registered local model to run tasks.</p>')+(a.last?'<h3>Last result</h3><pre class="output">'+esc(a.last)+'</pre>':''))}
-function selectContext(agent, task){
+function agentForm(a={}){modal(a.id?'Edit agent':'Set up an agent','<form id="agentForm" data-id="'+esc(a.id)+'"><label class="field">Agent name<input name="name" maxlength="60" required value="'+esc(a.name)+'"></label><label class="field">Role<input name="role" maxlength="80" required value="'+esc(a.role)+'" placeholder="Research analyst"></label><label class="field">Default task and instructions<textarea name="task" required maxlength="5000" placeholder="Explain what the agent should do and how to format its output.">'+esc(a.task)+'</textarea></label><label class="field">Local model<select name="model"><option value="">Choose later</option>'+data.models.map(m=>'<option value="'+esc(m.id)+'" '+(m.id===a.model?'selected':'')+'>'+esc(m.name)+'</option>').join('')+'</select></label><fieldset><legend>Knowledge for this agent</legend><small>Selected text is retrieved at run time. Model weights are unchanged.</small>'+data.files.filter(f=>typeof f.text==='string').map(f=>'<label><input type="checkbox" name="files" value="'+esc(f.id)+'" '+(a.files?.includes(f.id)?'checked':'')+'> '+esc(f.name)+'</label>').join('')+'</fieldset><label class="setup-check"><input type="checkbox" name="follow" '+(a.followLinkedNotes?'checked':'')+'> Follow one hop from connected notes by default</label><button class="primary" type="submit">Save agent setup</button></form>')}
+function agentSourceScope(agent, step, followLinks){
+ const space = activeSpace();
+ const members = new Set(space.members);
+ const hidden = new Set(space.hidden || []);
+ const files = new Map(data.files.filter(file => !hidden.has(file.id) &&
+  (space.id === 'home' ? data.profile?.demo || !file.sample : members.has(file.id))).map(file => [file.id, file]));
+ const direct = new Set((agent.files || []).filter(id => files.has(id)));
+ const targets = new Set([agent.id, step?.id].filter(Boolean));
+ const edges = data.links || [];
+ for (const {from, to} of edges) {
+  if (targets.has(from) && files.has(to)) direct.add(to);
+  if (targets.has(to) && files.has(from)) direct.add(from);
+ }
+ const ids = new Set(direct);
+ if (followLinks && direct.size) {
+  const names = new Map();
+  for (const file of files.values()) {
+   const key = fileNameKey(file.name);
+   names.set(key, names.has(key) ? null : file.id);
+  }
+  for (const {from, to} of edges) {
+   if (direct.has(from) && files.has(to)) ids.add(to);
+   if (direct.has(to) && files.has(from)) ids.add(from);
+  }
+  for (const id of [...direct].slice(0, 32)) {
+   const text = files.get(id)?.text?.slice(0, 32768) || '';
+   for (const match of text.matchAll(/\[\[([^\]\n]+)\]\]/g)) {
+    const target = names.get(fileNameKey(match[1].split('|')[0].split('#')[0]));
+    if (target) ids.add(target);
+   }
+  }
+ }
+ return {files: [...ids], workspace: space.id, record: data};
+}
+function agentResearchHistory(agentId, workspace){
+ return (data.evidenceJournal || []).filter(entry => entry.agent === agentId && entry.workspace === workspace);
+}
+async function saveAgentEvidence(agent, task, selection, scope, step){
+ if (!selection.quotes?.length) throw new Error('No matching evidence in the connected readable notes. Attach a relevant source or refine the task.');
+ const quotes = selection.quotes.map(({id, name, excerpt}) => ({id, name, excerpt}));
+ const inputs = JSON.stringify([agent.role, agent.task, task, [...scope.files].sort(), quotes]);
+ const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(inputs));
+ const fingerprint = Array.from(new Uint8Array(hash), byte => byte.toString(16).padStart(2, '0')).join('');
+ if (data !== scope.record || activeSpace().id !== scope.workspace) throw new Error('Return to the workspace where this run started.');
+ const prior = agentResearchHistory(agent.id, scope.workspace)
+  .find(entry => entry.fingerprint === fingerprint && entry.step === (step?.id || ''));
+ const output = quotes.map(quote => quote.name + '\n“' + quote.excerpt + '”').join('\n\n');
+ if (prior && (!step || (step.status === 'complete' && step.output === output))) return {output, reused: true};
+ const previous = data.evidenceJournal;
+ const previousStep = step ? {status: step.status, output: step.output} : null;
+ if (!prior) {
+  const entry = {agent: agent.id, workspace: scope.workspace, step: step?.id || '',
+   task: task.slice(0,160), fingerprint, quotes, time: Date.now()};
+  data.evidenceJournal = [entry, ...(previous || [])].slice(0, 120);
+ }
+ if (step) {step.output = output;step.status = 'complete';}
+ try {await save();}
+ catch (error) {
+  scope.record.evidenceJournal = previous;
+  if (step) Object.assign(step, previousStep);
+  throw new Error('Could not save this evidence locally.', {cause: error});
+ }
+ return {output, reused: !!prior};
+}
+function showAgent(agent, step = null){
+ const model = data.models.find(item => item.id === agent.model);
+ const scope = agentSourceScope(agent, step, false);
+ const ids = new Set(scope.files);
+ const currentSources = new Map(data.files.filter(file => ids.has(file.id)).map(file => [file.id, file]));
+ const names = [...currentSources.values()].slice(0,12).map(file => esc(file.name));
+ const journal = agentResearchHistory(agent.id, scope.workspace).slice(0, 8);
+ const history = journal.map(entry => '<details><summary>'+esc(entry.task)+'</summary><p>Saved evidence from '+esc(new Date(entry.time).toLocaleDateString())+'</p>'+
+  entry.quotes.filter(quote => currentSources.get(quote.id)?.text?.includes(quote.excerpt)).map(quote => '<p><strong>'+esc(quote.name)+'</strong></p><blockquote>'+esc(quote.excerpt)+'</blockquote>').join('')+
+  (entry.quotes.some(quote => !currentSources.get(quote.id)?.text?.includes(quote.excerpt))?'<p>Some excerpts changed or are outside the current direct connections.</p>':'')+'</details>').join('');
+ modal(esc(agent.name), '<p>'+esc(agent.role)+' · '+(model?esc(model.name):'Model not assigned')+'</p>'+
+  '<div class="actions">'+btn('edit','Edit setup',agent.id)+btn('deleteAgent','Remove agent',agent.id)+'</div>'+
+  '<h3>Connected notes</h3><p>'+(names.join(', ')||'No sources connected in this workspace.')+
+  (scope.files.length>12?' · '+scope.files.length+' total':'')+'</p>'+
+  '<form id="runForm" data-id="'+esc(agent.id)+'" data-step="'+esc(step?.id||'')+'"><label class="field">Task for this run<textarea name="task" maxlength="5000" required>'+esc(step?.description||agent.task)+'</textarea></label>'+
+  '<label class="field">Run mode<select name="mode"><option value="evidence">Evidence only · exact quotes</option><option value="draft" '+(!model?'disabled':'')+'>Model draft · review required</option></select></label>'+
+  '<label class="setup-check"><input type="checkbox" name="follow" '+(agent.followLinkedNotes?'checked':'')+'> Follow one hop from connected notes</label>'+
+  '<label class="field">Draft performance<select name="profile"><option value="quick">Quick</option><option value="balanced">Balanced</option><option value="extended">Extended</option></select></label>'+
+  '<p class="policy-detail">Evidence only saves matching excerpts locally. Model drafts can add unsupported claims. Both use sources from this workspace.</p>'+
+  '<div class="actions"><button type="submit" class="primary">Run locally</button><button type="button" data-stop-agent hidden>Stop run</button></div><div id="runProgress" role="status"></div><div id="runOutput"></div></form>'+
+  '<h3>Research record</h3>'+(history||'<p>Evidence runs appear here after they finish.</p>')+
+  (agent.last?'<details><summary>Last model draft · unverified</summary><pre class="output">'+esc(agent.last)+'</pre></details>':''));
+}
+function selectContext(agent, task, requireMatch = false){
  const ids = new Set(agent.files);
  if (!ids.size) return {text: '', sources: []};
- const terms = new Set((task.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) || []).slice(0, 64));
+ const ignored = new Set(['the','and','for','from','with','that','this','what','which','review','research','write','find','summarize','compare','data','document','information','task']);
+ const terms = new Set((task.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) || []).filter(term => !ignored.has(term)).slice(0, 64));
  const best = [];
  let remaining = 1024 * 1024;
  for (const file of data.files) {
@@ -77,6 +164,7 @@ function selectContext(agent, task){
    const words = new Set(excerpt.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) || []);
    let score = 0;
    for (const term of terms) if (words.has(term)) score++;
+   if (requireMatch && score === 0) continue;
    if (best.length === 4 && score <= best[3].score) continue;
    best.push({id: file.id, name: file.name, excerpt, score});
    best.sort((left, right) => right.score - left.score);
@@ -87,7 +175,8 @@ function selectContext(agent, task){
  }
  return {
   text: best.map(file => 'File: ' + file.name + '\n' + file.excerpt).join('\n\n'),
-  sources: [...new Set(best.map(file => file.id))]
+  sources: [...new Set(best.map(file => file.id))],
+  quotes: best
  };
 }
 function chooseContext(agent, task){return selectContext(agent, task).text}
@@ -95,6 +184,27 @@ async function run(agent, task, form){
  const progress = form.querySelector('#runProgress');
  const output = form.querySelector('#runOutput');
  if (running) {progress.textContent = 'A run is already in progress.';return;}
+ const mode = form.elements.mode.value;
+ const step = form.dataset.step ? data.tasks.find(item => item.id === form.dataset.step && item.agent === agent.id) : null;
+ if (form.dataset.step && !step) {progress.textContent = 'This workflow step changed. Open it again.';return;}
+ const scope = agentSourceScope(agent, step, form.elements.follow.checked);
+ output.textContent = '';
+ if (!scope.files.length) {progress.textContent = 'Connect a readable note to this agent in the current workspace.';return;}
+ const context = selectContext(scope, task, mode === 'evidence');
+ if (!context.sources.length) {progress.textContent = 'No matching evidence in the connected readable notes. Attach a source or refine the task.';return;}
+ if (mode === 'evidence') {
+  const submit = form.querySelector('[type="submit"]');
+  running = true;
+  submit.disabled = true;
+  try {
+   const result = await saveAgentEvidence(agent, task, context, scope);
+   output.className = 'output';
+   output.textContent = result.output;
+   progress.textContent = result.reused ? 'Reused existing evidence.' : 'Exact excerpts saved to the research record.';
+  } catch (error) {progress.textContent = error.message;}
+  finally {running = false;submit.disabled = false;}
+  return;
+ }
  if (!token) {progress.textContent = 'The local runtime is unavailable. Open Local models to check its status.';return;}
  const model = data.models.find(item => item.id === agent.model);
  if (!model) {progress.textContent = 'Assign a local model to this agent first.';return;}
@@ -132,7 +242,6 @@ async function run(agent, task, form){
   }
  };
  try {
-  const context = selectContext(agent, task);
   const result = await localModelRequest({
    model: model.name, model_id: model.companionId || null, model_source: model.source || null,
    task, role: agent.role, instructions: task.trim() === agent.task.trim() ? '' : agent.task,
@@ -148,7 +257,7 @@ async function run(agent, task, form){
   });
   finished = true;
   clearInterval(timer);
-  progress.textContent = 'Run complete · ' + ((performance.now() - started) / 1000).toFixed(1) + 's';
+  progress.textContent = 'Unverified draft · ' + ((performance.now() - started) / 1000).toFixed(1) + 's';
   output.className = 'output';
   output.textContent = result.output;
   if (data.profile.id === sourceProfile && data.agents.includes(agent)) {
@@ -210,7 +319,7 @@ document.addEventListener('submit',async e=>{
  if(form.id==='agentForm'){
   const existing=data.agents.find(a=>a.id===form.dataset.id),name=values.get('name').trim(),role=values.get('role').trim(),task=values.get('task').trim();
   if(!name||!role||!task)return toast('Enter a name, role, and task.');
-  const details={name,role,task,model:values.get('model'),files:values.getAll('files'),sample:false};
+  const details={name,role,task,model:values.get('model'),files:values.getAll('files'),followLinkedNotes:values.has('follow'),sample:false};
   if(await change(()=>{if(existing)Object.assign(existing,details);else data.agents.push({...details,id:crypto.randomUUID()});log(name,existing?'Agent setup updated':'Agent configured','Agents')})){$('#dialog').close();toast('Agent setup saved.')}
  }
  if(form.id==='runForm'){

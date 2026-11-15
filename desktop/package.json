@@ -1,6 +1,6 @@
 {
   "name": "agenetic-desktop",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Agenetic by Groundplanes, a local research workspace",
   "author": "Groundplanes",
   "private": true,
@@ -57,14 +57,18 @@
         }
       ],
       "artifactName": "Agenetic-Setup-${version}-${arch}.${ext}",
-      "signAndEditExecutable": true
+      "signAndEditExecutable": true,
+      "icon": "build/icon.ico"
     },
     "nsis": {
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
       "deleteAppDataOnUninstall": false,
-      "createDesktopShortcut": true
+      "createDesktopShortcut": true,
+      "installerIcon": "build/icon.ico",
+      "installerSidebar": "build/installerSidebar.bmp",
+      "include": "build/installer.nsh"
     },
     "publish": [
       {

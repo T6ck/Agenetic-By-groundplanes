@@ -29,3 +29,21 @@ html body.mindspace #content .community-shell>.community-compose{position:sticky
 .desktop-community{display:block!important}.desktop-community-intro{max-width:760px;margin:70px auto;padding:0 32px}.desktop-community-intro h1{font:40px/1.15 Georgia,serif;margin:24px 0}.desktop-community-intro p{font-size:15px;line-height:1.8;color:var(--ax-muted)}.desktop-community-intro>div{display:flex;flex-wrap:wrap;gap:12px;margin-top:30px}
 
 .model-row{gap:16px;align-items:center}.model-row>div{min-width:0}.model-row strong,.model-row a{overflow-wrap:anywhere}.model-row a{text-decoration:underline;text-underline-offset:3px}.model-row button{flex-shrink:0}.model-inspection{margin-top:24px;padding-top:24px;border-top:1px solid var(--line)}.model-runtime-status{font-size:13px}.model-search{align-items:end}@media(max-width:760px){.model-row{flex-wrap:wrap}.model-search{flex-wrap:wrap}}
+
+.setup-brand-art {
+  display: block;
+  width: 100%;
+  max-width: 150px;
+  height: auto;
+  margin-bottom: 18px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+}
+@media (max-width: 650px) {
+  .setup-brand-art {
+    float: right;
+    width: 44px;
+    margin: 0 0 0 14px;
+    border-radius: 8px;
+  }
+}

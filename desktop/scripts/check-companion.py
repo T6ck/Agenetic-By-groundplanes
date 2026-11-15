@@ -74,6 +74,7 @@ with tempfile.TemporaryDirectory() as folder:
         assert call('/run', {**payload, 'model_source': {'revision': 'incorrect'}})[0] == 409
         status, inference = call('/run', payload)
         assert status == 200 and inference.get('output', '').strip(), inference
+        assert 'Loading model...' not in inference['output'] and '<reference_excerpts>' not in inference['output'], inference
         print('Packaged companion verified authenticated GGUF registration, model identity checks, and real inference.')
     finally:
         process.kill()

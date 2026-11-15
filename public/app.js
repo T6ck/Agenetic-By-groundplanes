@@ -62,9 +62,112 @@ function modal(title,html){const d=$('#dialog');d.innerHTML=header(title,'',btn(
 function download(value,name,type='text/plain'){const url=URL.createObjectURL(value instanceof Blob?value:new Blob([value],{type}));const a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000)}
 async function ingest(files,kind){const models=kind==='Models', items=[];let skippedModel=false;for(const file of files){if(!models&&/\.gguf$/i.test(file.name)){skippedModel=true;continue;}if(models){const bytes=new Uint8Array(await file.slice(0,4).arrayBuffer());if(!/\.gguf$/i.test(file.name)||String.fromCharCode(...bytes)!=='GGUF'){toast('Choose a valid GGUF model file.');continue}}const item={id:crypto.randomUUID(),name:file.name,size:file.size};if(!models&&file.size<=2e6&&(/\.(txt|md|markdown|csv|tsv|json|jsonl|log|ya?ml|xml|toml|ini|rst)$/i.test(file.name)||file.type.startsWith('text/')))item.text=await file.text();items.push([item,file])}if(!items.length){if(skippedModel)toast('Open Local models and choose Existing GGUF to add model weights.');return;}if(await change(()=>{const group=models?data.models:data.files;for(const [item] of items){group.push(item);if(data.spaces&&activeSpace())activeSpace().members.push(item.id);log(item.name,models?'Model registered':'File imported',kind)}},models?[]:items.map(([item,file])=>[item.id,file])))toast(items.length+(items.length===1?' item added':' items added')+' to this workspace.'+(skippedModel?' Open Local models for GGUF files.':''))}
 function agentForm(a={}){modal(a.id?'Edit agent':'Set up an agent','<form id="agentForm" data-id="'+esc(a.id)+'"><label class="field">Agent name<input name="name" maxlength="60" required value="'+esc(a.name)+'"></label><label class="field">Role<input name="role" maxlength="80" required value="'+esc(a.role)+'" placeholder="Research analyst"></label><label class="field">Default task and instructions<textarea name="task" required maxlength="5000" placeholder="Explain what the agent should do and how to format its output.">'+esc(a.task)+'</textarea></label><label class="field">Local model<select name="model"><option value="">Choose later</option>'+data.models.map(m=>'<option value="'+esc(m.id)+'" '+(m.id===a.model?'selected':'')+'>'+esc(m.name)+'</option>').join('')+'</select></label><fieldset><legend>Knowledge for this agent</legend><small>Selected text is retrieved at run time. Model weights are unchanged.</small>'+data.files.filter(f=>typeof f.text==='string').map(f=>'<label><input type="checkbox" name="files" value="'+esc(f.id)+'" '+(a.files?.includes(f.id)?'checked':'')+'> '+esc(f.name)+'</label>').join('')+'</fieldset><button class="primary" type="submit">Save agent setup</button></form>')}
-function showAgent(a){const m=data.models.find(m=>m.id===a.model);modal(esc(a.name),'<p>'+esc(a.role)+' · '+(m?esc(m.name):'Model not assigned')+'</p><h3>Default task</h3><p>'+esc(a.task)+'</p><h3>Knowledge</h3><p>'+ (data.files.filter(f=>a.files.includes(f.id)).map(f=>esc(f.name)).join(', ')||'No files attached.')+'</p><div class="actions">'+btn('edit','Edit setup',a.id)+btn('deleteAgent','Remove agent',a.id)+'</div>'+(m?'<form id="runForm" data-id="'+esc(a.id)+'"><label class="field">Task for this run<textarea name="task" maxlength="5000" required>'+esc(a.task)+'</textarea></label><button type="submit" class="primary">Run locally</button><div id="runOutput" role="status"></div></form>':'<p>Assign a registered local model to run tasks.</p>')+(a.last?'<h3>Last result</h3><pre class="output">'+esc(a.last)+'</pre>':''))}
-function chooseContext(a,task){const terms=new Set((task.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu)||[]));return data.files.filter(f=>a.files.includes(f.id)&&f.text).flatMap(f=>{const items=[];for(let offset=0;offset<f.text.length;offset+=800){const excerpt=f.text.slice(offset,offset+1000);const words=new Set(excerpt.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu)||[]);let score=0;for(const t of terms)if(words.has(t))score++;items.push({name:f.name,excerpt,score})}return items}).sort((x,y)=>y.score-x.score).slice(0,4).map(f=>'File: '+f.name+'\n'+f.excerpt).join('\n\n')}
-async function run(a,task,form){if(running)return toast('A task is already running.');if(!token)return toast('Connect your runner from Local models first.');const m=data.models.find(m=>m.id===a.model), output=form.querySelector('#runOutput'), button=form.querySelector('button');if(!m)return;running=true;button.disabled=true;output.textContent='Running on your device…';try{const r=await localModelRequest({model:m.name,model_id:m.companionId||null,model_source:m.source||null,task,role:a.role,instructions:a.task,context:chooseContext(a,task)},{agent:a.id,label:a.name+' · '+task.slice(0,80)});output.className='output';output.textContent=r.output;if(data.agents.some(x=>x.id===a.id))await change(()=>{a.last=r.output;log(a.name+' completed a task','Local inference','Agents');data.logs[0].run=true})}catch(e){output.textContent=e instanceof TypeError?'Could not reach the local runner. Check that it is running and allow local network access if your browser asks.':e.message}finally{running=false;button.disabled=false}}
+function showAgent(a){const m=data.models.find(m=>m.id===a.model), attached=new Set(a.files);modal(esc(a.name),'<p>'+esc(a.role)+' · '+(m?esc(m.name):'Model not assigned')+'</p><h3>Default task</h3><p>'+esc(a.task)+'</p><h3>Knowledge</h3><p>'+ (data.files.filter(f=>attached.has(f.id)).slice(0,12).map(f=>esc(f.name)).join(', ')+(attached.size>12?' · '+attached.size+' attached':'')||'No files attached.')+'</p><div class="actions">'+btn('edit','Edit setup',a.id)+btn('deleteAgent','Remove agent',a.id)+'</div>'+(m?'<form id="runForm" data-id="'+esc(a.id)+'"><label class="field">Task for this run<textarea name="task" maxlength="5000" required>'+esc(a.task)+'</textarea></label><label class="field">Run profile<select name="profile"><option value="quick">Quick · short answer, lower memory</option><option value="balanced">Balanced · more context and detail</option><option value="extended">Extended · larger context and longer output</option></select></label><p class="policy-detail">Hardware checks stay on this device. This run uses the task and attached notes. '+(!attached.size?'Attach sources for an evidence-based answer. ':'')+'Web search is not part of a local agent run.</p><div class="actions"><button type="submit" class="primary">Run locally</button><button type="button" data-stop-agent hidden>Stop run</button></div><div id="runProgress" role="status"></div><div id="runOutput"></div></form>':'<p>Assign a registered local model to run tasks.</p>')+(a.last?'<h3>Last result</h3><pre class="output">'+esc(a.last)+'</pre>':''))}
+function selectContext(agent, task){
+ const ids = new Set(agent.files);
+ if (!ids.size) return {text: '', sources: []};
+ const terms = new Set((task.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) || []).slice(0, 64));
+ const best = [];
+ let remaining = 1024 * 1024;
+ for (const file of data.files) {
+  if (!ids.has(file.id) || !file.text) continue;
+  const limit = Math.min(256 * 1024, file.text.length, remaining);
+  for (let offset = 0; offset < limit; offset += 800) {
+   const excerpt = file.text.slice(offset, Math.min(limit, offset + 1000));
+   const words = new Set(excerpt.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) || []);
+   let score = 0;
+   for (const term of terms) if (words.has(term)) score++;
+   if (best.length === 4 && score <= best[3].score) continue;
+   best.push({id: file.id, name: file.name, excerpt, score});
+   best.sort((left, right) => right.score - left.score);
+   if (best.length > 4) best.pop();
+  }
+  remaining -= limit;
+  if (!remaining) break;
+ }
+ return {
+  text: best.map(file => 'File: ' + file.name + '\n' + file.excerpt).join('\n\n'),
+  sources: [...new Set(best.map(file => file.id))]
+ };
+}
+function chooseContext(agent, task){return selectContext(agent, task).text}
+async function run(agent, task, form){
+ const progress = form.querySelector('#runProgress');
+ const output = form.querySelector('#runOutput');
+ if (running) {progress.textContent = 'A run is already in progress.';return;}
+ if (!token) {progress.textContent = 'The local runtime is unavailable. Open Local models to check its status.';return;}
+ const model = data.models.find(item => item.id === agent.model);
+ if (!model) {progress.textContent = 'Assign a local model to this agent first.';return;}
+ const profile = form.elements.profile.value;
+ const button = form.querySelector('[type="submit"]');
+ const stop = form.querySelector('[data-stop-agent]');
+ const sourceProfile = data.profile.id;
+ const started = performance.now();
+ let requestId;
+ let stopping = false;
+ let finished = false;
+ running = true;
+ button.disabled = true;
+ output.textContent = '';
+ const tick = () => {
+  const elapsed = Math.floor((performance.now() - started) / 1000);
+  progress.textContent = requestId
+   ? (stopping ? 'Stopping' : 'Checking memory, loading model, or generating') + ' · ' + elapsed + 's elapsed'
+   : 'Selecting source excerpts…';
+ };
+ tick();
+ const timer = setInterval(tick, 1000);
+ stop.onclick = async () => {
+  if (!requestId || finished) return;
+  stopping = true;
+  stop.disabled = true;
+  tick();
+  try {
+   await companionCall('/cancel', {request_id: requestId});
+  } catch (error) {
+   if (finished) return;
+   stopping = false;
+   stop.disabled = false;
+   progress.textContent = 'Could not stop yet: ' + error.message;
+  }
+ };
+ try {
+  const context = selectContext(agent, task);
+  const result = await localModelRequest({
+   model: model.name, model_id: model.companionId || null, model_source: model.source || null,
+   task, role: agent.role, instructions: task.trim() === agent.task.trim() ? '' : agent.task,
+   context: context.text, profile
+  }, {
+   agent: agent.id, label: agent.name + ' · ' + task.slice(0, 80), sources: context.sources,
+   onRequest(id) {
+    requestId = id;
+    stop.hidden = false;
+    stop.disabled = false;
+    tick();
+   }
+  });
+  finished = true;
+  clearInterval(timer);
+  progress.textContent = 'Run complete · ' + ((performance.now() - started) / 1000).toFixed(1) + 's';
+  output.className = 'output';
+  output.textContent = result.output;
+  if (data.profile.id === sourceProfile && data.agents.includes(agent)) {
+   agent.last = result.output;
+   log(agent.name + ' completed a task', 'Local inference', 'Agents');
+   data.logs[0].run = true;
+   await save();
+  }
+ } catch (error) {
+  progress.textContent = error instanceof TypeError ? 'Could not reach the local runtime. Check Local models and restart Agenetic if needed.' : error.message;
+ } finally {
+  finished = true;
+  clearInterval(timer);
+  running = false;
+  button.disabled = false;
+  stop.hidden = true;
+  stop.onclick = null;
+ }
+}
 async function act(action,id){
  const a=data.agents.find(x=>x.id===id),f=data.files.find(x=>x.id===id),m=data.models.find(x=>x.id===id);
  if(action==='go'){page=id;zoom=1;$('#dialog').close();render();window.scrollTo(0,0);return}

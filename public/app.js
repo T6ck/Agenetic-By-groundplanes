@@ -60,6 +60,82 @@ function render(){
 }
 function modal(title,html){const d=$('#dialog');d.innerHTML=header(title,'',btn('close','Close'))+'<div class="pad">'+html+'</div>';if(!d.open)d.showModal()}
 function download(value,name,type='text/plain'){const url=URL.createObjectURL(value instanceof Blob?value:new Blob([value],{type}));const a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000)}
+function researchSourceReady(file, files, chain = new Set()){
+ if (!file?.text?.trim() || chain.has(file.id) || chain.size >= 12) return false;
+ const research = file.research;
+ if (!research) return !file.originTrace && !/^## Evidence review\n[\s\S]*\n## Critical review\n/.test(file.text);
+ if (!['evidence','supported'].includes(research.state) || !research.quotes?.length || file.text!==research.reviewedText) return false;
+ const visited = new Set(chain).add(file.id);
+ return research.quotes.every(({id, excerpt}) => {
+  const source = files.get(id);
+  return (data.links||[]).some(link=>link.from===id&&link.to===file.id) &&
+   source?.text?.includes(excerpt) && researchSourceReady(source, files, visited);
+ });
+}
+function appendResearchNode({name, text, state, sources, quotes = [], step = '', draft = '', agent = '', statement = '', stepTask = ''}){
+ const space = activeSpace();
+ const node = {id:crypto.randomUUID(),name:name.slice(0,120),text,size:new Blob([text]).size,
+  research:{state, sources:[...new Set(sources)].slice(0,20), quotes, step, draft, agent, statement, stepTask, reviewedText:['evidence','supported'].includes(state)?text:'', workspace:space.id}};
+ data.links ??= [];
+ data.files.push(node);
+ if (!space.members.includes(node.id)) space.members.push(node.id);
+ for (const from of new Set([...node.research.sources, step, draft, agent].filter(Boolean))) {
+  data.links.push({from,to:node.id});
+ }
+ return node;
+}
+function reviewResearchDraft(draft){
+ const workspace = activeSpace().id;
+ if (draft.research?.state !== 'pending' || draft.research.workspace !== workspace) return;
+ const files = new Map(workspaceSourceFiles().map(file => [file.id,file]));
+ const choices = draft.research.sources.map(id=>files.get(id)).filter(file=>researchSourceReady(file,files));
+ const reviewed = [...files.values()].filter(file=>file.research?.draft===draft.id);
+ modal(esc(draft.name), '<p>Draft · excluded from task sources until you review individual claims.</p><pre class="output">'+esc(draft.text)+'</pre>'+
+  '<h3>Claim review</h3>'+(reviewed.length?'<ul>'+reviewed.map(file=>'<li>'+esc(file.research.state)+' · '+esc(file.name)+'</li>').join('')+'</ul>':'')+
+  '<form id="claim-review"><label class="field">One claim<textarea name="claim" required maxlength="600"></textarea></label>'+
+  '<label class="field">Decision<select name="decision"><option value="supported">Supported by the quoted source</option><option value="unresolved">Needs more evidence</option><option value="rejected">Rejected</option></select></label>'+
+  '<label class="field">Original connected source<select name="source"><option value="">Choose a source</option>'+choices.map(file=>'<option value="'+esc(file.id)+'">'+esc(file.name)+'</option>').join('')+'</select></label>'+
+  '<pre id="claim-source-preview" class="output" hidden></pre><label class="field">Exact supporting quote<textarea name="quote" maxlength="1200"></textarea></label>'+
+  '<button type="submit" class="primary">Save reviewed claim</button><p role="status"></p></form>');
+ const form = $('#claim-review'), record = data;
+ form.elements.source.onchange = () => {
+  const source = choices.find(file=>file.id===form.elements.source.value), preview = $('#claim-source-preview');
+  preview.hidden = !source;
+  preview.textContent = source?.text?.slice(0,9000)||'';
+ };
+ form.onsubmit = async event => {
+  event.preventDefault();
+  const status = form.querySelector('[role="status"]');
+  const values = new FormData(form), claim = values.get('claim').trim(), decision = values.get('decision');
+  if (data !== record || activeSpace().id !== workspace || !record.files.includes(draft)) return;
+  if (!claim || !['supported','unresolved','rejected'].includes(decision)) return;
+  const source = choices.find(file=>file.id===values.get('source'));
+  const excerpt = values.get('quote').trim();
+  const live = new Map(workspaceSourceFiles().map(file=>[file.id,file]));
+  if (decision === 'supported' && (!source || excerpt.length < 12 ||
+    !live.get(source.id)?.text?.includes(excerpt) || !researchSourceReady(live.get(source.id),live))) {
+   status.textContent = 'Select an eligible connected source and paste at least 12 characters of exact supporting text.';
+   return;
+  }
+  const verified = decision==='supported';
+  const button = form.querySelector('button');
+  button.disabled = true;
+  try {
+   const saved = await change(()=>{
+    for (const file of reviewed) {
+     if (file.research.statement?.toLowerCase()===claim.toLowerCase()) file.research.state='superseded';
+    }
+    appendResearchNode({
+    name:'Claim · '+claim, text:verified?claim+'\n\nSupporting excerpt from '+source.name+':\n'+excerpt:claim,
+    state:decision, sources:verified?[source.id]:[], quotes:verified?[{id:source.id,excerpt}]:[],
+    step:draft.research.step, draft:draft.id, agent:draft.research.agent, statement:claim, stepTask:draft.research.stepTask
+    });
+   });
+   if (saved) reviewResearchDraft(draft);
+  } finally {button.disabled = false;}
+ };
+}
+
 function workspaceSourceFiles(){
  const space = activeSpace();
  const members = new Set(space.members);
@@ -121,9 +197,14 @@ async function indexSavedPdfs(files, retry = false){
   throw error;
  } finally {pdfIndexing = false;}
 }
+function selectedResearchSources(ids){
+ const files = new Map(workspaceSourceFiles().map(file=>[file.id,file]));
+ return [...new Set(ids)].filter(id=>researchSourceReady(files.get(id),files));
+}
 function sourcePicker(legend){
  const files = workspaceSourceFiles();
- const readable = files.filter(file => file.text?.trim());
+ const byId = new Map(files.map(file=>[file.id,file]));
+ const readable = files.filter(file => researchSourceReady(file, byId));
  const rejected = files.filter(file => file.pdfIndex?.error);
  return '<fieldset data-readable-picker><legend>'+esc(legend)+'</legend><div data-readable-options>'+
   (readable.map(file => '<label><input type="checkbox" name="sources" value="'+esc(file.id)+'"> '+esc(file.name)+
@@ -162,12 +243,20 @@ function agentSourceScope(agent, step, followLinks){
  const hidden = new Set(space.hidden || []);
  const files = new Map(data.files.filter(file => !hidden.has(file.id) &&
   (space.id === 'home' ? data.profile?.demo || !file.sample : members.has(file.id))).map(file => [file.id, file]));
- const direct = new Set((agent.files || []).filter(id => files.has(id)));
+ const direct = new Set((agent.files || []).filter(id => files.has(id)&&(!step||files.get(id).research?.step!==step.id)));
+ if (step) {
+  const steps = new Set(data.tasks.filter(item=>!hidden.has(item.id)&&(space.id==='home'?(data.profile?.demo||!item.sample):members.has(item.id))).map(item=>item.id));
+  const predecessors = new Set((data.links||[]).filter(edge=>edge.to===step.id && steps.has(edge.from)).map(edge=>edge.from));
+  for (const file of files.values()) {
+   if (predecessors.has(file.research?.step) && researchSourceReady(file,files)
+       && (data.links||[]).some(edge=>edge.from===file.research.step && edge.to===file.id)) direct.add(file.id);
+  }
+ }
  const targets = new Set([agent.id, step?.id].filter(Boolean));
  const edges = data.links || [];
  for (const {from, to} of edges) {
-  if (targets.has(from) && files.has(to)) direct.add(to);
-  if (targets.has(to) && files.has(from)) direct.add(from);
+  if (targets.has(from) && files.has(to) && !files.get(to).research) direct.add(to);
+  if (targets.has(to) && files.has(from) && (!step||files.get(from).research?.step!==step.id)) direct.add(from);
  }
  const ids = new Set(direct);
  if (followLinks && direct.size) {
@@ -177,18 +266,18 @@ function agentSourceScope(agent, step, followLinks){
    names.set(key, names.has(key) ? null : file.id);
   }
   for (const {from, to} of edges) {
-   if (direct.has(from) && files.has(to)) ids.add(to);
-   if (direct.has(to) && files.has(from)) ids.add(from);
+   if (direct.has(from) && files.has(to) && !files.get(to).research) ids.add(to);
+   if (direct.has(to) && files.has(from) && !files.get(from).research) ids.add(from);
   }
   for (const id of [...direct].slice(0, 32)) {
    const text = files.get(id)?.text?.slice(0, 32768) || '';
    for (const match of text.matchAll(/\[\[([^\]\n]+)\]\]/g)) {
     const target = names.get(fileNameKey(match[1].split('|')[0].split('#')[0]));
-    if (target) ids.add(target);
+    if (target && !files.get(target).research) ids.add(target);
    }
   }
  }
- return {files: [...ids], workspace: space.id, record: data};
+ return {files: [...ids].filter(id=>!files.get(id)?.text?.trim() || researchSourceReady(files.get(id),files)), workspace: space.id, record: data};
 }
 function agentResearchHistory(agentId, workspace){
  return (data.evidenceJournal || []).filter(entry => entry.agent === agentId && entry.workspace === workspace);
@@ -203,22 +292,38 @@ async function saveAgentEvidence(agent, task, selection, scope, step){
  const prior = agentResearchHistory(agent.id, scope.workspace)
   .find(entry => entry.fingerprint === fingerprint && entry.step === (step?.id || ''));
  const output = quotes.map(quote => quote.name + '\n“' + quote.excerpt + '”').join('\n\n');
- if (prior && (!step || (step.status === 'complete' && step.output === output))) return {output, reused: true};
+ const space = activeSpace();
+ const artifact = prior && data.files.find(file=>file.id===prior.node && file.research?.state==='evidence'
+  && !(space.hidden||[]).includes(file.id) && (space.id==='home'||space.members.includes(file.id))
+  && (!step || (data.links||[]).some(link=>link.from===step.id&&link.to===file.id)));
+ if (artifact && (!step || (step.status === 'complete' && step.output === output))) return {output, reused: true, node:artifact.id};
+ const priorNodes = data.files.filter(file=>file.research?.state==='evidence'&&file.research.workspace===scope.workspace&&file.research.agent===agent.id&&(step?file.research.step===step.id:file.research.query===task));
+ const previousStates = new Map(priorNodes.map(file=>[file,file.research]));
+ const oldFiles = data.files.slice(), oldLinks = (data.links||[]).slice(), oldMembers = space.members.slice();
  const previous = data.evidenceJournal;
  const previousStep = step ? {status: step.status, output: step.output} : null;
- if (!prior) {
+ data.links ??= [];
+ const node = artifact || appendResearchNode({name:'Evidence · '+(step?.name||task),text:output,state:'evidence',
+  sources:quotes.map(quote=>quote.id),quotes,step:step?.id||'',agent:agent.id});
+ if (!artifact) {
+  node.research.query = task;
+  for (const old of priorNodes) if (old!==node) old.research = {...old.research,state:'superseded'};
   const entry = {agent: agent.id, workspace: scope.workspace, step: step?.id || '',
-   task: task.slice(0,160), fingerprint, quotes, time: Date.now()};
+   task: task.slice(0,160), fingerprint, quotes, node:node.id, time: Date.now()};
   data.evidenceJournal = [entry, ...(previous || [])].slice(0, 120);
  }
  if (step) {step.output = output;step.status = 'complete';}
  try {await save();}
  catch (error) {
   scope.record.evidenceJournal = previous;
+  scope.record.files = oldFiles;
+  scope.record.links = oldLinks;
+  space.members = oldMembers;
+  for (const [file, research] of previousStates) file.research = research;
   if (step) Object.assign(step, previousStep);
   throw new Error('Could not save this evidence locally.', {cause: error});
  }
- return {output, reused: !!prior};
+ return {output, reused: !!artifact, node:node.id};
 }
 function showAgent(agent, step = null){
  const model = data.models.find(item => item.id === agent.model);
@@ -369,6 +474,18 @@ async function run(agent, task, form){
   output.textContent = result.output;
   if (data.profile.id === sourceProfile && data.agents.includes(agent)) {
    agent.last = result.output;
+   const saveDraft = document.createElement('button');
+   saveDraft.type = 'button';
+   saveDraft.textContent = 'Save draft to graph for review';
+   output.after(saveDraft);
+   saveDraft.onclick = async () => {
+    if (data!==scope.record || activeSpace().id!==scope.workspace) return;
+    saveDraft.disabled = true;
+    let draft;
+    if (await change(()=>{draft = appendResearchNode({name:'Draft · '+task,text:result.output,
+     state:'pending',sources:context.sources,step:step?.id||'',agent:agent.id,stepTask:step?.description||''});})) reviewResearchDraft(draft);
+    else saveDraft.disabled = false;
+   };
    log(agent.name + ' completed a task', 'Local inference', 'Agents');
    data.logs[0].run = true;
    await save();
@@ -393,6 +510,7 @@ async function act(action,id){
  if(action==='agent'&&a)return showAgent(a);
  if(action==='close')return $('#dialog').close();
  if(action==='zoomIn'||action==='zoomOut'||action==='resetZoom'){if(action==='resetZoom'){panX=0;panY=0;}zoom=action==='resetZoom'?1:Math.min(2.6,Math.max(.55,zoom*(action==='zoomIn'?1.22:1/1.22)));return render()}
+ if(action==='file'&&f?.research?.state==='pending')return reviewResearchDraft(f);
  if(action==='file'&&f)return modal(esc(f.name),(typeof f.text==='string'?'<pre class="output">'+esc(f.text.slice(0,16000))+'</pre>':'<p>Stored as an original file. This file type or size is unavailable for text retrieval.</p>')+'<div class="actions">'+btn('downloadFile','Download original',id)+btn('deleteFile','Remove file',id)+'</div>');
  if(action==='model'&&m)return modal(esc(m.name),'<p>Registered on this device. Start the runner with this original GGUF to use it with an agent.</p>'+btn('deleteModel','Remove registration',id));
  if(action==='downloadFile'&&f){const item=await blob(id)??f.text;if(item!==undefined)download(item,f.name);else toast('The original is unavailable.');return}

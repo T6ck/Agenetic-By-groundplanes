@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 
 test('an already-imported renamed PDF becomes selectable without changing the graph ID', async () => {
  const source = readFileSync('public/app.js', 'utf8');
- const code = source.slice(source.indexOf('function workspaceSourceFiles'), source.indexOf("document.addEventListener('click', async event"));
+ const code = source.slice(source.indexOf('function researchSourceReady'), source.indexOf("document.addEventListener('click', async event"));
  const file = {id:'original-id', name:'Reta Research PDF', size:32};
  const data = {profile:{id:'profile'}, files:[file], links:[{from:file.id,to:'agent'}]};
  let saves = 0;

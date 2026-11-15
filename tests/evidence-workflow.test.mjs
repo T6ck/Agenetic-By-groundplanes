@@ -25,12 +25,12 @@ function fixture(){
  };
  const space = {id:'space',members:['direct','step','linked','far','hidden','first','second','unrelated'],hidden:['hidden']};
  let writes = 0;
- const code = extract('app.js','function agentSourceScope','function showAgent') +
+ const code = extract('app.js','function researchSourceReady','function workspaceSourceFiles') + extract('app.js','function agentSourceScope','function showAgent') +
   extract('app.js','function selectContext','async function run(agent') +
   extract('canvas.js','function evidenceWorkflow','async function executeStep');
- const api = runInNewContext(code + '({agentSourceScope,selectContext,saveAgentEvidence,evidenceWorkflow})', {
+ const api = runInNewContext(code + '({agentSourceScope,selectContext,saveAgentEvidence,evidenceWorkflow,researchSourceReady,appendResearchNode})', {
   data, activeSpace:()=>space, fileNameKey:value=>value.replace(/\.md$/i,'').toLowerCase(),
-  crypto, TextEncoder, save:async()=>{writes++}
+  crypto, Blob, TextEncoder, save:async()=>{writes++}
  });
  return {api, data, agent, task, writes:()=>writes};
 }
@@ -64,4 +64,43 @@ test('workflow executes only the target dependency branch and detects cycles', (
  assert.deepEqual(Array.from(api.evidenceWorkflow('second'), task=>task.id), ['first','second']);
  data.links.push({from:'second',to:'first'});
  assert.throws(()=>api.evidenceWorkflow('second'),/circular/);
+});
+
+test('a step creates a reusable graph result and its dependent sees it without feeding it back to itself', async () => {
+ const {api,data,agent,task} = fixture();
+ const upstream = data.tasks.find(item=>item.id==='first');
+ upstream.agent = agent.id;
+ const scope = api.agentSourceScope(agent,upstream,false);
+ const read = api.selectContext(scope,'Compare temperature',true);
+ const result = await api.saveAgentEvidence(agent,'Compare temperature',read,scope,upstream);
+ assert.ok(result.node);
+ assert.ok(data.links.some(link=>link.from==='direct'&&link.to===result.node));
+ assert.ok(data.links.some(link=>link.from===upstream.id&&link.to===result.node));
+ assert.ok(api.agentSourceScope(agent,task,false).files.includes(result.node));
+ assert.ok(!api.agentSourceScope(agent,upstream,true).files.includes(result.node));
+ data.files[0].text = 'Temperature changed.';
+ assert.ok(!api.agentSourceScope(agent,task,false).files.includes(result.node));
+});
+
+test('pending, rejected, edited and disconnected claims cannot be handed off', () => {
+ const {api,data,agent,task} = fixture();
+ const draft = api.appendResearchNode({name:'Draft',text:'A claim was made.',state:'pending',sources:['direct']});
+ data.links.push({from:draft.id,to:task.id});
+ assert.ok(!api.agentSourceScope(agent,task,false).files.includes(draft.id));
+ const evidence = data.files[0].text;
+ const claim = api.appendResearchNode({name:'Claim',text:'Teacher recorded 18 C.',state:'supported',sources:['direct'],
+  quotes:[{id:'direct',excerpt:evidence}],draft:draft.id});
+ data.links.push({from:claim.id,to:task.id});
+ assert.ok(api.agentSourceScope(agent,task,false).files.includes(claim.id));
+ claim.text += ' Fabrication';
+ assert.ok(!api.agentSourceScope(agent,task,false).files.includes(claim.id));
+ claim.text = claim.research.reviewedText;
+ data.links = data.links.filter(link=>link.from!=='direct'||link.to!==claim.id);
+ assert.ok(!api.agentSourceScope(agent,task,false).files.includes(claim.id));
+});
+
+test('multiple targets share prerequisites only once', () => {
+ const {api,data} = fixture();
+ data.links.push({from:'first',to:'unrelated'});
+ assert.deepEqual(Array.from(api.evidenceWorkflow(['second','unrelated']),task=>task.id), ['first','second','unrelated']);
 });

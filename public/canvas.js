@@ -74,7 +74,7 @@ render=function() {
   $('#content').innerHTML='<div class="space-stage" tabindex="-1" aria-label="Mindspace canvas"><div class="space-world"><div class="group-layer">'+space.groups.map(groupMarkup).join('')+'</div><svg class="connection-layer" aria-label="Connections"><defs><marker id="edge-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M 0 0 L 10 5 L 0 10" fill="currentColor"/></marker></defs><g>'+studioLinks().map(l=>'<path data-edge="'+esc(connectionKey(l))+'" class="edge '+l.kind+'" d="'+edgePath(l)+'" marker-end="url(#edge-arrow)"/>').join('')+'</g></svg><div class="card-layer">'+nodes.map(cardMarkup).join('')+'</div></div><div class="selection-box" hidden></div></div>'+
   '<header class="space-header"><div class="brand-orbit" aria-label="Agenetic"><span>⋈</span><strong>dendral</strong></div><span class="header-divider"></span><button class="space-switcher" data-command="spaces">'+esc(space.name)+' <span>⌄</span></button><div class="header-right"><span class="local-indicator"><i></i> On this device</span>'+studioButton('search','⌕','', 'aria-label="Search mindspace" title="Search · Ctrl K"')+studioButton('share','<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V3m-4 4 4-4 4 4M4 13v8h16v-8"/></svg>','', 'aria-label="Export workflow"')+'</div></header>'+
   '<div class="space-caption"><span>WORKSPACE</span><h1>'+esc(space.name)+'</h1><p>'+ (nodes.length?'A place for connected thought.':'Start with a note. Give it room to grow.')+'</p></div>'+
-  '<div class="space-dock">'+studioButton('library','▥<span>Library</span>','', 'title="Browse your knowledge"')+'<i></i>'+studioButton('note','▤<span>Note</span>','', 'title="New note · N"')+studioButton('agent','◈<span>Agent</span>')+studioButton('task','<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 18 18 5M7 5h11v11"/></svg><span>Step</span>')+'<i></i>'+studioButton('group','⊞<span>Group</span>','', 'title="Group selected cards · Ctrl G"')+studioButton('fit','⌗<span>Fit</span>','', 'title="Fit canvas · F"')+'</div>'+
+  '<div class="space-dock">'+studioButton('library','▥<span>Library</span>','', 'title="Browse your knowledge"')+'<i></i>'+studioButton('note','▤<span>Note</span>','', 'title="New note · N"')+studioButton('agent','◈<span>Agent</span>')+studioButton('task','<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 18 18 5M7 5h11v11"/></svg><span>Step</span>')+'<i></i>'+studioButton('run-batch','<span>Run tasks</span>')+studioButton('group','⊞<span>Group</span>','', 'title="Group selected cards · Ctrl G"')+studioButton('fit','⌗<span>Fit</span>','', 'title="Fit canvas · F"')+'</div>'+
   '<div class="space-footer"><span id="space-hint">Drag to explore · Scroll to zoom · Shift-drag to select</span><div>'+studioButton('undo','↶','', 'aria-label="Undo" '+(!studio.history.length?'disabled':''))+studioButton('redo','↷','', 'aria-label="Redo" '+(!studio.future.length?'disabled':''))+studioButton('zoomout','−','', 'aria-label="Zoom out"')+'<span id="zoom-value"></span>'+studioButton('zoomin','＋','', 'aria-label="Zoom in"')+'</div></div>'+
   '<aside id="space-library" '+(!studio.library?'hidden':'')+'></aside><aside id="space-inspector" '+(!studio.inspector?'hidden':'')+'></aside><div id="connect-banner" '+(!studio.connecting?'hidden':'')+'>Select another card to connect'+studioButton('cancel','Cancel')+'</div>';
   applyCamera();drawLibrary();drawInspector();
@@ -109,10 +109,19 @@ function drawInspector() {
   if(!studio.inspector||!n){el.hidden=true;return}el.hidden=false;
   const links=studioLinks().filter(l=>l.from===n.id||l.to===n.id);
   let fields='';
-  if(n.kind==='file')fields='<label>Content<textarea name="text" '+(n.text===undefined?'disabled':'')+'>'+esc(n.text??'Binary file. Open the original from the file vault.')+'</textarea></label>';
+  if(n.kind==='file')fields='<label>Content<textarea name="text" '+(n.text===undefined?'disabled':n.research?'readonly':'')+'>'+esc(n.text??'Binary file. Open the original from the file vault.')+'</textarea></label>';
   if(n.kind==='agent')fields='<label>Role<input name="role" required value="'+esc(n.role)+'"></label><label>Instructions<textarea name="task" required maxlength="5000">'+esc(n.task)+'</textarea></label><label>Model<select name="model" aria-label="Model"><option value="">Choose a local model</option>'+data.models.map(m=>'<option value="'+esc(m.id)+'" '+(n.model===m.id?'selected':'')+'>'+esc(m.name)+'</option>').join('')+'</select></label>';
   if(n.kind==='task')fields='<label>Task<textarea name="description" required maxlength="5000">'+esc(n.description)+'</textarea></label><label>Assigned agent<select name="agent" aria-label="Assigned agent"><option value="">Choose an agent</option>'+data.agents.map(a=>'<option value="'+esc(a.id)+'" '+(n.agent===a.id?'selected':'')+'>'+esc(a.name)+'</option>').join('')+'</select></label><label>Status<select name="status" aria-label="Status">'+['planned','in progress','complete'].map(s=>'<option '+(n.status===s?'selected':'')+'>'+s+'</option>').join('')+'</select></label>';
   el.innerHTML='<div class="floating-heading"><span class="inspector-type">'+symbols[n.kind]+' '+n.kind+'</span>'+studioButton('close-inspector','×','', 'aria-label="Close inspector"')+'</div><form id="studio-editor" data-key="'+esc(n.id)+'"><input class="editor-title" name="name" aria-label="Title" value="'+esc(n.name)+'" maxlength="120" required>'+fields+'<div class="editor-save"><span id="editor-status">Saved locally</span><button type="submit" class="save-button">Save</button></div></form>'+(n.kind==='agent'?'<div class="inspector-actions">'+studioButton('run-agent','Run a task ↗',n.id)+'</div>':'')+(n.kind==='task'?'<div class="inspector-actions">'+studioButton('run-step','Run with agent ↗',n.id)+'</div>':'')+'<div class="inspector-section">Connections <span>'+links.length+'</span></div>'+links.map(l=>{const other=studioNodes().find(x=>x.id===(l.from===n.id?l.to:l.from));return '<div class="inspector-link">'+studioButton('focus',esc(other.name),other.id)+'<small>'+(l.kind==='wikilink'?(l.from===n.id?'Links to':'Linked from'):l.kind==='context'?'Agent context':l.kind==='assignment'?'Assigned agent':l.kind==='model'?'Model':'Reference')+'</small>'+studioButton('unlink','×',connectionKey(l),'aria-label="Disconnect '+esc(other.name)+'"')+'</div>'}).join('')+'<div class="inspector-actions">'+studioButton('connect','＋ Connect',n.id)+studioButton('remove','Remove from space',n.id)+'</div>'+(n.output?'<div class="inspector-section">Last output</div><pre class="output">'+esc(n.output)+'</pre>':'');
+  if (n.kind==='file' && n.research) {
+   const state = n.research.state;
+   const files = new Map(workspaceSourceFiles().map(file=>[file.id,file]));
+   const ready = researchSourceReady(n,files);
+   const label = ready ? (state==='supported'?'Reviewed claim':'Exact evidence') :
+    ({pending:'Draft · needs claim review',rejected:'Claim rejected',unresolved:'Needs evidence'}[state]||'Evidence unavailable or superseded');
+   el.insertAdjacentHTML('beforeend','<div class="inspector-section">'+esc(label)+'</div><div class="inspector-actions">'+
+    (state==='pending'?studioButton('review-research','Review claims',n.id):ready?studioButton('branch-research','Create next step',n.id):'')+'</div>');
+  }
   studio.dirty=false;
 }
 async function commitStudio(mutator) {
@@ -129,7 +138,7 @@ async function saveEditor() {
   const n=[...data.files,...data.agents,...data.models,...data.tasks].find(n=>n.id===id);if(!n)return false;
   const before=structuredClone(data);
   const title=String(values.get('name')||'').trim();if(!title){toast('Give this item a name.');return false}n.name=title;
-  for(const key of ['text','role','task','model','description','agent','status'])if(values.has(key))n[key]=values.get(key);
+  for(const key of ['text','role','task','model','description','agent','status'])if(values.has(key)&&!(key==='text'&&n.research))n[key]=values.get(key);
   if(n.text!==undefined)n.size=new Blob([n.text]).size;
   n.sample=false;
   try{await save();studio.history.push(before);studio.future=[];studio.dirty=false;return true}
@@ -218,68 +227,126 @@ function evidenceWorkflow(target){
   if (completed.has(id)) return;
   if (visiting.has(id)) throw new Error('Remove the circular connection between workflow steps.');
   if (!tasks.has(id)) throw new Error('Open the workspace containing this step.');
-  if (visiting.size + completed.size >= 12) throw new Error('This branch exceeds the 12-step run limit. Run it in smaller sections.');
+  if (visiting.size + completed.size >= 32) throw new Error('This batch exceeds the 32-step run limit. Choose fewer targets.');
   visiting.add(id);
   for (const dependency of upstream.get(id) || []) visit(dependency);
   visiting.delete(id);
   completed.add(id);
   ordered.push(tasks.get(id));
  }
- visit(target);
+ for (const id of Array.isArray(target)?target:[target]) visit(id);
  return ordered;
 }
 
 async function executeStep(id){
  if (!await saveEditor()) return;
  if (running) {toast('A local task is already running.');return;}
- let steps;
- try {steps = evidenceWorkflow(id);}
- catch (error) {report(error);return;}
- const task = steps.at(-1);
- const draftAgent = data.agents.find(agent => agent.id === task.agent);
- const list = steps.map(item => '<li>'+esc(item.name)+'</li>').join('');
- modal(esc(task.name), '<p>Run these steps in dependency order using exact excerpts. Each step reads only notes connected to its assigned agent or to the step itself. Arrows point from prerequisite to dependent step. Matching saved evidence is reused.</p>'+
-  '<ol>'+list+'</ol><label class="setup-check"><input type="checkbox" id="step-follow"> Follow one hop from connected notes</label>'+
-  '<button type="button" class="primary" id="step-run">Run evidence workflow</button>'+
-  (draftAgent?'<button type="button" id="step-draft">Open model draft</button>':'')+'<p id="step-status" role="status"></p><pre id="step-output" class="output"></pre>');
+ const tasks=spaceNodes().filter(node=>node.kind==='task');
+ const task=tasks.find(item=>item.id===id);
+ const draftAgent = data.agents.find(agent => agent.id === task?.agent);
+ const picked = new Set(id?[id]:[...studio.selected]);
+ const list = tasks.map(item=>'<label><input type="checkbox" name="targets" value="'+esc(item.id)+'" '+
+  (picked.has(item.id)?'checked':'')+'> '+esc(item.name)+'</label>').join('');
+ modal(esc(task?.name||'Run research tasks'), '<p>Choose one or more targets. Prerequisites run once in arrow order. Finished evidence is saved into the graph. Independent branches continue if a step gets blocked.</p>'+
+  '<fieldset id="step-targets"><legend>Tasks to run</legend>'+(list||'<p>Add a workflow step first.</p>')+'</fieldset>'+
+  '<label class="setup-check"><input type="checkbox" id="step-follow"> Follow one hop from connected notes</label>'+
+  '<div class="actions"><button type="button" class="primary" id="step-run">Run evidence workflow</button>'+
+  '<button type="button" id="step-stop" hidden>Stop after current step</button>'+
+  (draftAgent?'<button type="button" id="step-draft">Open model draft</button>':'')+
+  '</div><p id="step-status" role="status"></p><div id="step-output"></div>');
  const button = $('#step-run'), status = $('#step-status'), output = $('#step-output');
- const dialog = $('#dialog');
- const draft = $('#step-draft');
- if (draft) draft.onclick = () => {if (!running) showAgent(draftAgent, task);};
+ const dialog = $('#dialog'), stop = $('#step-stop'), draft = $('#step-draft');
+ if (draft) draft.onclick = () => {if (!running) showAgent(draftAgent, data.tasks.find(item=>item.id===id));};
  const workspace = activeSpace().id, record = data;
+ let stopping = false;
+ stop.onclick = () => {stopping=true;stop.disabled=true;status.textContent='Stopping after the current step…';};
  button.onclick = async () => {
   if (running) {status.textContent = 'Wait for the active run.';return;}
+  const targets = [...$('#step-targets').querySelectorAll('input:checked')].map(input=>input.value);
+  if (!targets.length) {status.textContent='Choose at least one task.';return;}
+  let steps;
+  try {steps = evidenceWorkflow(targets);}
+  catch (error) {status.textContent=error.message;return;}
   const follow = $('#step-follow').checked;
-  const results = [];
+  const results = [], blocked = new Set(), ordered = new Set(steps.map(item=>item.id));
+  stopping=false;
   running = true;
   button.disabled = true;
+  stop.hidden=false;
+  stop.disabled=false;
+  output.innerHTML='';
+  const display = () => {output.innerHTML = results.map(result=>
+   '<details '+(result.error?'open':'')+'><summary>'+esc(result.title)+'</summary><pre class="output">'+esc(result.text)+'</pre>'+
+   (result.node?studioButton('branch-research','Create next step',result.node):'')+'</details>').join('');};
   try {
    for (const item of steps) {
-    if (!dialog.open || !button.isConnected || data !== record || activeSpace().id !== workspace) {
-     throw new Error('Workflow stopped. Finished steps remain saved.');
-    }
+    if (stopping || !dialog.open || !button.isConnected || data !== record || activeSpace().id !== workspace) break;
     status.textContent = 'Checking evidence for '+item.name+'…';
-    const agent = data.agents.find(candidate => candidate.id === item.agent);
-    if (!agent) throw new Error('Assign an agent to '+item.name+' before continuing.');
-    const scope = agentSourceScope(agent, item, follow || agent.followLinkedNotes);
-    const sourceIds = new Set(scope.files);
-    const pdfFailures = await indexSavedPdfs(workspaceSourceFiles().filter(file=>sourceIds.has(file.id)));
-    const selection = selectContext(scope, item.description || agent.task, true);
-    if (!selection.quotes?.length) throw new Error(item.name+': '+(pdfFailures[0] || 'no matching evidence. Attach a relevant note or revise the task.'));
-    const result = await saveAgentEvidence(agent, item.description || agent.task, selection, scope, item);
-    results.push(item.name+(result.reused?' · reused':' · saved')+'\n'+result.output);
-    output.textContent = results.join('\n\n');
+    try {
+     if ((data.links||[]).some(link=>link.to===item.id&&ordered.has(link.from)&&blocked.has(link.from))) {
+      throw new Error('Waiting for an upstream step.');
+     }
+     const agent = data.agents.find(candidate => candidate.id === item.agent);
+     if (!agent) throw new Error('Assign an agent before continuing.');
+     const fileMap = new Map(workspaceSourceFiles().map(file=>[file.id,file]));
+     const approved = [...fileMap.values()].find(file=>file.research?.step===item.id&&file.research.state==='supported'&&file.research.stepTask===item.description
+      && (data.links||[]).some(link=>link.from===item.id&&link.to===file.id)&&researchSourceReady(file,fileMap));
+     if (approved) {results.push({title:item.name+' · reviewed claim',text:approved.text,node:approved.id});display();continue;}
+     const scope = agentSourceScope(agent, item, follow || agent.followLinkedNotes);
+     const sourceIds = new Set(scope.files);
+     const pdfFailures = await indexSavedPdfs(workspaceSourceFiles().filter(file=>sourceIds.has(file.id)));
+     if (data!==record || activeSpace().id!==workspace) break;
+     const selection = selectContext(scope, item.description || agent.task, true);
+     if (!selection.quotes?.length) throw new Error(pdfFailures[0] || 'No matching evidence. Attach a relevant source or review a claim for this step.');
+     const result = await saveAgentEvidence(agent, item.description || agent.task, selection, scope, item);
+     results.push({title:item.name+(result.reused?' · reused':' · added to graph'),text:result.output,node:result.node});
+    } catch (error) {
+     blocked.add(item.id);
+     results.push({title:item.name+' · blocked',text:error.message,error:true});
+    }
+    display();
    }
-   status.textContent = 'Evidence workflow complete.';
-  } catch (error) {
-   status.textContent = error.message;
-   if (!status.isConnected) toast(error.message);
+   status.textContent=results.length+' / '+steps.length+' checked · '+blocked.size+' blocked'+(results.length<steps.length?' · stopped':'');
+   render();
   } finally {
    running = false;
    button.disabled = false;
+   stop.hidden=true;
   }
  };
 }
+
+function branchResearch(id){
+ if (running) {toast('Wait for the current workflow to finish.');return;}
+ const files=new Map(workspaceSourceFiles().map(file=>[file.id,file]));
+ const source=files.get(id);
+ if (!researchSourceReady(source,files)) {toast('Review the research or restore its supporting evidence before branching.');return;}
+ const workspace=activeSpace().id, record=data;
+ modal('Branch from research','<p>'+esc(source.name)+'</p><form id="branch-research-form">'+
+  '<label class="field">Step name<input name="name" maxlength="120" required></label>'+
+  '<label class="field">Next research task<textarea name="task" maxlength="5000" required></textarea>'+
+  '<button type="submit" class="primary">Create connected step</button></form>');
+ $('#branch-research-form').onsubmit=async event=>{
+  event.preventDefault();
+  if (data!==record||activeSpace().id!==workspace||running) return;
+  const values=new FormData(event.target),name=values.get('name').trim(),description=values.get('task').trim();
+  if (!name||!description) return;
+  const item={id:crypto.randomUUID(),name,description,agent:source.research?.agent||'',status:'planned'};
+  if (await commitStudio(()=>{
+   data.tasks.push(item);
+   activeSpace().members.push(item.id);
+   data.links.push({from:source.id,to:item.id});
+   const ancestor=source.research?.step;
+   if (ancestor && spaceNodes().some(node=>node.id===ancestor&&node.kind==='task')) data.links.push({from:ancestor,to:item.id});
+  })) {
+   $('#dialog').close();
+   studio.selected=new Set([item.id]);
+   studio.inspector=true;
+   render();
+  }
+ };
+}
+
 async function studioCommand(action,id) {
   if(!await saveEditor())return;
   if(action==='home'){page='Overview';render();return}
@@ -315,6 +382,9 @@ async function studioCommand(action,id) {
   if(action==='share')return workflowDialog();
   if(action==='run-agent')return act('agent',id);
   if(action==='run-step')return executeStep(id);
+  if(action==='run-batch')return executeStep();
+  if(action==='branch-research')return branchResearch(id);
+  if(action==='review-research')return act('file',id);
 }
 document.addEventListener('click',e=>{
   const command=e.target.closest('[data-command]');if(command){studioCommand(command.dataset.command,command.dataset.key).catch(report);return}

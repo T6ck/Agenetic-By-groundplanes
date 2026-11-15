@@ -201,13 +201,14 @@ function selectedResearchSources(ids){
  const files = new Map(workspaceSourceFiles().map(file=>[file.id,file]));
  return [...new Set(ids)].filter(id=>researchSourceReady(files.get(id),files));
 }
-function sourcePicker(legend){
+function sourcePicker(legend, defaults = []){
+ const checked = new Set(defaults);
  const files = workspaceSourceFiles();
  const byId = new Map(files.map(file=>[file.id,file]));
  const readable = files.filter(file => researchSourceReady(file, byId));
  const rejected = files.filter(file => file.pdfIndex?.error);
  return '<fieldset data-readable-picker><legend>'+esc(legend)+'</legend><div data-readable-options>'+
-  (readable.map(file => '<label><input type="checkbox" name="sources" value="'+esc(file.id)+'"> '+esc(file.name)+
+  (readable.map(file => '<label><input type="checkbox" name="sources" value="'+esc(file.id)+'" '+(checked.has(file.id)?'checked':'')+'> '+esc(file.name)+
    (file.pdfIndex?.partial?' · partial PDF text':'')+'</label>').join('')||'<p>No readable sources in this workspace yet.</p>')+
   '</div>'+(files.some(file=>!file.text?.trim()&&file.size)?'<button type="button" data-index-pdfs>Index saved PDFs</button>':'')+
   '<p data-pdf-status role="status">'+esc(rejected.map(file=>file.name+': '+file.pdfIndex.error).slice(0,3).join(' '))+'</p></fieldset>';

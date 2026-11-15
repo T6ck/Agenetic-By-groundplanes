@@ -1,0 +1,108 @@
+/* Shared Groundplane family, tuned for a spatial research workspace. */
+html body{--family-wash:color-mix(in srgb,var(--ax-accent) 9%,transparent);--family-shell:color-mix(in srgb,var(--ax-panel) 91%,transparent)}
+html body.mindspace #content{background:var(--ax-bg)!important}
+html body.mindspace #content .family-header{position:absolute;top:14px;left:18px;right:18px;height:64px!important;min-height:64px;margin:0;padding:0 18px!important;border:1px solid var(--ax-line)!important;border-radius:999px!important;background:var(--family-shell)!important;backdrop-filter:blur(20px);box-shadow:0 1px 0 #ffffff22 inset,0 9px 24px -18px #182e3e66!important;gap:16px;z-index:20;display:flex;align-items:center}
+html body .family-header .knowledge-brand{width:auto;min-width:148px;gap:9px}
+html body .family-header .brand-family strong{font-size:20px;letter-spacing:-.65px}
+html body .family-header .brand-family small{font-size:10px;letter-spacing:.2px;color:var(--ax-muted)}
+html body .family-header .view-switch{border-radius:999px!important;padding:4px;border:1px solid var(--ax-line);background:transparent!important}
+html body .family-header .view-switch button{border-radius:999px!important;padding:8px 13px!important;font-size:12px!important}
+html body .family-header .view-switch button.active{background:var(--ax-panel)!important;border:1px solid var(--ax-line)!important}
+html body .family-header .profile-control{border-radius:999px!important;max-width:210px;padding:8px 12px!important;background:transparent!important;border:1px solid var(--ax-line)!important}
+html body .family-header .profile-control span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+html body .family-header .community-entry{font-size:12px;padding:8px 12px!important;border-radius:999px!important}
+html body .family-header .knowledge-header-actions{gap:12px}
+html body .account-control{padding:0!important;background:transparent!important;border:0!important;flex:none}
+.identity-avatar{display:flex;width:34px;height:34px;border-radius:50%;overflow:hidden;align-items:center;justify-content:center;background:var(--ax-raised);color:var(--ax-ink);border:1px solid var(--ax-line);font-size:12px;font-weight:500}
+.identity-avatar img{width:100%;height:100%;object-fit:cover}
+html body .knowledge-explorer{top:96px;background:transparent!important;border-right:1px solid var(--ax-line)!important}
+html body .network-stage{top:96px!important;background-image:radial-gradient(ellipse at 30% 0%,var(--family-wash),transparent 65%)!important;background-size:100% 100%!important}
+html body .network-context{top:28px;left:32px}
+html body .network-context h1{font-size:30px!important;line-height:1.15;margin:13px 0}
+html body .network-context>span{font-size:10px;letter-spacing:.8px;color:var(--ax-muted)}
+html body .graph-subtitle{font-size:13px!important;line-height:1.6}
+html body .network-add{top:28px;border-radius:999px;padding:5px}
+html body .knowledge-mode #space-inspector{top:96px!important;border-radius:20px!important}
+html body .appearance-panel{top:92px!important;z-index:30}
+html body .graph-settings{top:94px!important}
+html body .space-caption{top:110px!important}
+html body .space-stage{background-image:radial-gradient(ellipse at 30% 0%,var(--family-wash),transparent 65%)!important;background-size:100% 100%!important}
+html body :is(button,.button,.identity-login){border-radius:999px}
+html body :is(.primary,.editor-save .save-button,.community-compose button[type=submit]){border-radius:999px!important;padding:10px 18px!important}
+html body :is(input,textarea,select){border-radius:10px!important;box-shadow:none!important}
+html body dialog{border-radius:24px!important;padding:30px;width:min(620px,calc(100vw - 32px));max-height:calc(100vh - 48px)}
+html body dialog h2{font-size:32px!important;letter-spacing:-.7px;font-weight:400}
+html body dialog::backdrop{background:#14232a44!important;backdrop-filter:blur(5px)}
+html body :is(button,a,input,select,textarea):focus-visible{outline:2px solid var(--ax-accent)!important;outline-offset:3px}
+.identity-lead{font-size:15px;line-height:1.65;margin:0 0 28px}
+.identity-photo-row{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.identity-large{width:72px;height:72px;font-size:23px}
+.identity-photo-button{position:relative;display:inline-flex;align-items:center;overflow:hidden;border:1px solid var(--ax-line);border-radius:999px;padding:11px 17px;font-size:13px;cursor:pointer}
+.identity-photo-button:focus-within{outline:2px solid var(--ax-accent);outline-offset:3px}
+.identity-photo-button input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}
+.identity-help{font-size:12px!important;line-height:1.65;max-width:450px;color:var(--ax-muted)!important;margin:14px 0 24px}
+.identity-section{border-top:1px solid var(--ax-line);padding-top:24px;margin-top:24px}
+.identity-section h3{font-size:17px;font-weight:500;margin:10px 0}
+.identity-section p{font-size:13px;line-height:1.75}
+.identity-login{display:inline-flex;align-items:center;gap:12px;border:1px solid var(--ax-line);padding:11px 17px;color:var(--ax-ink);text-decoration:none;font-size:13px}
+html body .community-shell{padding-top:94px;grid-template-rows:0 minmax(0,1fr);background:radial-gradient(ellipse at 50% 0%,var(--family-wash),transparent 60%),var(--ax-bg)!important}
+html body .community-shell>.family-header{grid-column:auto;grid-row:auto}
+html body .community-shell>.family-header>div{margin-left:auto}
+html body .community-shell .community-nav,html body .community-shell .community-main{background:transparent!important}
+html body .community-shell .community-compose{margin:20px 18px 20px 0;border-radius:20px!important}
+html body .community-nav{padding-top:28px!important}
+@media(max-width:1100px){html body .family-header{gap:9px!important}html body .family-header .profile-control{max-width:160px}html body .family-header .knowledge-brand{min-width:126px}html body .family-header .knowledge-header-actions{gap:6px}html body .family-header .profile-control small{display:none}}
+@media(max-width:760px){html body.mindspace #content .family-header{left:8px;right:8px;top:8px;height:58px!important;min-height:58px;padding:0 12px!important;gap:8px!important}html body .family-header .knowledge-brand{min-width:0}html body .family-header .brand-family{display:none}html body .family-header .profile-control{max-width:100px;padding:6px!important}html body .family-header .profile-control .line-icon{display:none}html body .family-header .knowledge-header-actions [data-command=share]{display:none}html body .family-header .view-switch button{font-size:10px!important;padding:6px!important}html body .family-header .community-entry{font-size:10px;padding:5px!important}html body .family-header .knowledge-header-actions{margin-left:auto;gap:3px}html body .family-header .knowledge-header-actions button span{display:none}html body .network-stage{top:80px!important}html body .network-context{left:20px}html body .network-context h1{font-size:25px!important}html body .network-add{top:144px;right:12px}html body .community-shell{padding-top:82px;display:block}html body .community-shell>.family-header .local-boundary{display:none!important}html body .community-shell .community-compose{margin:20px}html body .family-header .appearance-entry span{display:none}html body .knowledge-mode #space-inspector{top:82px!important}}
+html body .space-header.family-header .appearance-entry{margin-left:auto;order:80}
+html body .space-header.family-header .community-entry{margin-left:0;order:90}
+html body .space-header.family-header .account-control{order:100}
+html body .space-header.family-header .canvas-view-switch{position:static;transform:none;left:auto;margin-left:0}
+html[data-theme=porcelain] body :is(.mind-card,.community-compose,#space-inspector){box-shadow:0 1px 2px #2030390b,0 7px 22px -15px #20303933!important}
+html body .family-header .account-control{border-radius:50%!important}
+html body.mindspace #content .community-shell>header.family-header{position:absolute!important;top:14px;left:18px;right:18px;height:64px!important;min-height:64px;background:var(--family-shell)!important;grid-column:auto;grid-row:auto}
+html body.mindspace #content .community-shell{grid-template-rows:minmax(0,1fr)}
+html body.mindspace #content .community-shell>.community-compose{margin:12px 18px 18px 0!important}
+html body.mindspace #content .community-shell>.community-nav{background:transparent!important}
+@media(max-width:760px){html body.mindspace #content .community-shell>header.family-header{top:8px;left:8px;right:8px;height:58px!important;min-height:58px}html body.mindspace #content .community-shell>.community-compose{margin:16px!important}}
+/* Ambient paint stays anchored to the viewport, never the panned graph camera. */
+html body .network-stage,html body .space-stage{background-position:0 0!important;background-repeat:no-repeat!important;background-size:100% 100%!important}
+html[data-depth=off] body .network-stage,html[data-depth=off] body .space-stage{background-image:none!important}
+html[data-depth=subtle] body{--family-wash:color-mix(in srgb,var(--ax-accent) 5%,transparent)}
+html[data-grid=false] body .network-stage .grid-field{display:none!important}
+html[data-headings=sans] body :is(.network-context h1,.space-caption h1,.community-nav h1,.community-heading h2,.community-compose h2,dialog h2){font-family:var(--font-sans)!important}
+html[data-density=compact] body .knowledge-file-list button{padding-top:5px!important;padding-bottom:5px!important}
+html[data-density=compact] body .community-main{padding-top:22px;padding-bottom:22px}
+html[data-density=compact] body .community-post{padding:16px 0}
+html[data-motion=false] body *,html[data-motion=false] body *::before,html[data-motion=false] body *::after{animation:none!important;transition:none!important}
+.appearance-personal,.appearance-sharing{border-top:1px solid var(--ax-line);padding-top:18px;margin-top:18px}
+.appearance-sharing h3{font-size:16px;font-weight:500}.appearance-sharing p{font-size:12px;line-height:1.7}
+.appearance-sharing>button,.theme-import{display:flex;position:relative;width:100%;padding:10px 13px!important;border:1px solid var(--ax-line)!important;border-radius:12px!important;margin:8px 0;font-size:12px!important;overflow:hidden;cursor:pointer}
+.theme-import input{position:absolute;inset:0;opacity:0;width:100%;cursor:pointer}.theme-import:focus-within{outline:2px solid var(--ax-accent);outline-offset:2px}
+html[data-scheme=light] body .grid-field,html[data-scheme=light] body .space-stage::after{--grid-ink:color-mix(in srgb,var(--ax-ink) 5%,transparent)}
+html[data-scheme=light] body :is(.primary,.editor-save .save-button,.community-compose button[type=submit]){background:var(--ax-ink)!important;color:var(--ax-panel)!important}
+html[data-scheme=light] body :is(.mind-card,.community-compose,#space-inspector){box-shadow:0 1px 2px #2030390b,0 7px 22px -15px #20303933!important}
+html[data-scheme=light] body .knowledge-edge{stroke:var(--ax-muted)!important}
+html[data-scheme=light] body{--g0:#277567;--g1:#277567;--mat-edge:var(--ax-line);--material:var(--ax-panel)}
+html[data-scheme=light] *{scrollbar-color:var(--ax-line) transparent}
+
+/* Keep the empty-state controls above the interactive graph plane. */
+.graph-empty{z-index:3;pointer-events:auto;max-width:540px;text-align:left;top:40%;right:24px}.graph-empty h2{font-family:'Instrument Sans',Arial,sans-serif;font-size:26px;line-height:1.2}.graph-empty p{font-size:14px;line-height:1.7;max-width:480px}.graph-empty button{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;margin:8px 8px 0 0;padding:10px 16px!important;vertical-align:top}.workflow-actions{display:flex;gap:10px;flex-wrap:wrap;margin:20px 0}.workflow-review{max-height:40vh;overflow:auto}@media(max-height:650px){.graph-empty{top:35%;}.graph-empty h2{font-size:22px}}
+
+.model-search{display:flex;align-items:end;gap:12px;flex-wrap:wrap;margin:20px 0}.model-search .field{flex:1;min-width:220px;margin:0}.model-row{display:flex;justify-content:space-between;align-items:center;gap:20px;padding:18px 0;border-bottom:1px solid var(--ax-line);overflow-wrap:anywhere}.model-row>div{min-width:0}.model-row p{font-size:12px}.model-inspection{margin-top:24px}.model-inspection .policy-detail{overflow-wrap:anywhere}
+/* Launch-family finishing pass: atmosphere at the perimeter, quiet reading surfaces. */
+html body{--family-wash:color-mix(in srgb,var(--ax-accent) 13%,transparent)}
+html body .network-stage{background-image:radial-gradient(ellipse at 15% 0%,var(--family-wash),transparent 58%),radial-gradient(ellipse at 100% 100%,color-mix(in srgb,var(--ax-accent) 6%,transparent),transparent 60%)!important}
+html body .family-header{border-color:color-mix(in srgb,var(--ax-line) 75%,var(--ax-panel))!important}
+html body .research-companion h2,html body dialog h2{font-family:Georgia,serif;font-weight:400;letter-spacing:-.035em;line-height:1.12}
+html body dialog{max-height:85dvh;overflow:auto;scrollbar-gutter:stable}
+html body dialog p{line-height:1.65;max-width:70ch}
+html body dialog fieldset{border:1px solid var(--ax-line);border-radius:14px;padding:16px;max-height:230px;overflow:auto;margin:20px 0}
+html body dialog fieldset label{display:flex;gap:10px;align-items:center;padding:8px 0}
+html body dialog .output{white-space:pre-wrap;overflow-wrap:anywhere;max-height:420px;overflow:auto;font-size:12px;line-height:1.65}
+html body .model-row{gap:24px;align-items:center}html body .model-row>div{min-width:0}html body .model-row p{overflow-wrap:anywhere}html body .model-row>button{flex-shrink:0}
+html body button:focus-visible,html body a:focus-visible{outline:2px solid var(--ax-accent);outline-offset:4px}
+@media(prefers-reduced-motion:reduce){html body *,html body *:before,html body *:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+@media(max-width:600px){html body .model-row{align-items:flex-start;flex-direction:column;gap:8px}html body dialog{width:calc(100vw - 24px);padding:20px!important}}
+
+html body dialog,html body .research-companion{box-shadow:0 12px 36px -24px #172b344d!important}
+html body dialog input,html body dialog textarea,html body dialog select{box-shadow:none!important;border:1px solid var(--ax-line)!important}

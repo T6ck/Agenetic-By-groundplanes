@@ -1,0 +1,160 @@
+'use strict';
+const $=s=>document.querySelector(s), esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const icons={Overview:'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z',Graph:'M5 6l7 6 7-7M12 12l6 7M3 6a2 2 0 1 0 4 0 2 2 0 1 0-4 0m7 6a2 2 0 1 0 4 0 2 2 0 1 0-4 0m7-7a2 2 0 1 0 4 0 2 2 0 1 0-4 0m-1 14a2 2 0 1 0 4 0 2 2 0 1 0-4 0',Agents:'M4 8h16v12H4zM12 4v4M1 12v4m22-4v4M8 13h1m6 0h1m-7 4h6',Vault:'M3 7h7l2 2h9v11H3zM3 7V4h7l2 3h7v2',Models:'M6 6h12v12H6zM9 9h6v6H9zM9 2v4m6-4v4m-6 12v4m6-4v4M2 9h4m-4 6h4m12-6h4m-4 6h4',Activity:'M2 12h5l3-7 4 14 3-7h5',Sharing:'M3 11v10h18V11M12 16V3m-4 4 4-4 4 4'};
+const icon=n=>'<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="'+icons[n]+'"/></svg>';
+const box=(n,c='')=>'<span class="icon '+c+'">'+icon(n)+'</span>';
+const seeds={agents:[{id:'atlas',name:'Atlas',role:'Research analyst',task:'Summarize research into clear findings and cite source filenames.',files:['brief','notes'],sample:true},{id:'sentinel',name:'Sentinel',role:'Security reviewer',task:'Identify risks and prioritize findings.',files:['security','brief'],sample:true},{id:'scribe',name:'Scribe',role:'Documentation agent',task:'Turn notes into concise documentation.',files:['notes','runbook'],sample:true}],files:[{id:'brief',name:'Project Brief.md',sample:true,text:'# Project brief\nBuild a local operations workspace for scoped agents.'},{id:'notes',name:'Research Notes.md',sample:true,text:'# Research notes\nRecord findings with their sources and open questions.'},{id:'security',name:'Security Policy.md',sample:true,text:'# Security policy\nKeep data on-device and require approval to share anything.'},{id:'runbook',name:'Runbook.md',sample:true,text:'# Runbook\nAssign a role, select context, and run a specific task.'}],models:[],logs:[{title:'Sample workspace created',detail:'Overview · Example activity',type:'Graph'},{title:'Research notes linked to Atlas',detail:'File vault · Example activity',type:'Vault'},{title:'Sentinel configured',detail:'Agents · Example activity',type:'Agents'}]};
+let panX=0,panY=0; let data, db, page='Overview', zoom=1, token='', companionBase='http://127.0.0.1:7871', running=false, timer;
+const initial={agents:[],files:[],models:[],logs:[]};
+const req=r=>new Promise((resolve,reject)=>{r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)});
+function save(blobs=[],remove=[]){return new Promise((resolve,reject)=>{const t=db.transaction(['state','blobs'],'readwrite');try{t.objectStore('state').put(data,'current');if(deviceAppearance)t.objectStore('state').put(deviceAppearance,'device-appearance');if(data.profile){t.objectStore('state').put(data,'profile:'+data.profile.id);t.objectStore('state').put(profileRegistry,'profiles');}for(const [id,file] of blobs)t.objectStore('blobs').put(file,id);for(const id of remove)t.objectStore('blobs').delete(id)}catch(e){t.abort();reject(e)}t.oncomplete=resolve;t.onabort=()=>reject(t.error??new Error('Storage write failed'));t.onerror=()=>reject(t.error)})}
+const blob=id=>req(db.transaction('blobs').objectStore('blobs').get(id));
+function toast(s){$('#toast').textContent=s;clearTimeout(timer);timer=setTimeout(()=>$('#toast').textContent='',6000)}
+async function change(fn, files=[], remove=[]){const prev=structuredClone(data);fn();try{await save(files,remove);render();return true}catch(e){data=prev;toast('Could not save on this device. Check browser storage.');return false}}
+function log(title,detail,type){data.logs.unshift({title,detail,type,time:new Date().toISOString()});data.logs=data.logs.slice(0,100)}
+function intro(title,description,tag=''){return '<section class="intro"><div><div class="eyebrow">AGENETIC / WORKSPACE</div><h1>'+title+'</h1><p>'+description+'</p></div>'+tag+'</section>'}
+const btn=(action,label,id='')=>'<button data-act="'+action+'" data-id="'+esc(id)+'">'+label+'</button>';
+const header=(title,sub='',right='')=>'<div class="panel-head"><div><h2>'+title+'</h2>'+(sub?'<p>'+sub+'</p>':'')+'</div>'+right+'</div>';
+const empty=s=>'<div class="empty">'+s+'</div>';
+function agentRow(a){return '<button class="agent-row" data-act="agent" data-id="'+esc(a.id)+'">'+box('Agents')+'<span class="row-main"><strong>'+esc(a.name)+'</strong><small>'+esc(a.role)+'</small></span><span class="pill '+(a.sample?'':'green')+'">'+(a.sample?'Sample':a.model?'Ready':'Setup')+'</span></button>'}
+function fileRow(f,type='Vault'){return '<button class="file-row" data-act="'+(type==='Models'?'model':'file')+'" data-id="'+esc(f.id)+'">'+box(type,type==='Models'?'blue':'mint')+'<span class="row-main"><strong>'+esc(f.name)+'</strong><small>'+(f.sample?'Sample':new Intl.NumberFormat(undefined,{style:'unit',unit:'megabyte',maximumFractionDigits:2}).format(f.size/1e6)+(f.size<10000?' · '+f.size+' bytes':''))+'</small></span><span>›</span></button>'}
+function activity(rows){return rows.map(r=>'<div class="activity-row">'+box(r.type,'mint')+'<div class="row-main"><strong>'+esc(r.title)+'</strong><small>'+esc(r.detail)+(r.time?' · '+esc(new Date(r.time).toLocaleString()):'')+'</small></div></div>').join('')||empty('No activity yet.')}
+function graph(){
+ const nodes=[...data.files.map(f=>({...f,type:'file'})),...data.agents.map(a=>({...a,type:'agent'})),...data.models.map(m=>({...m,type:'model'}))];
+ const positions=new Map();
+ let fileIndex=0, agentIndex=0, modelIndex=0;
+ for(const n of nodes){
+  const i=n.type==='file'?fileIndex++:n.type==='agent'?agentIndex++:modelIndex++;
+  positions.set(n.id,n.type==='file'?[35+(i%4)*237,32+Math.floor(i/4)*210]:n.type==='agent'?[130+(i%3)*290,310+Math.floor(i/3)*240]:[160+(i%3)*280,600+Math.floor(i/3)*200]);
+ }
+ let paths='';
+ for(const a of data.agents){
+  const [ax,ay]=data.positions?.[a.id]||positions.get(a.id);
+  for(const id of [...a.files,a.model].filter(Boolean)){
+   const pos=data.positions?.[id]||positions.get(id);if(!pos)continue;
+   const [x,y]=pos;
+   paths+='<path d="M'+(ax+100)+' '+ay+' C'+(ax+100)+' '+(ay-75)+' '+(x+100)+' '+(y+245)+' '+(x+100)+' '+(y+175)+'" fill="none" stroke="#80778c" stroke-width="1" opacity=".7"/>';
+  }
+ }
+ return '<div class="graph"><svg viewBox="'+[500-500/zoom-panX,280-280/zoom-panY,1000/zoom,560/zoom].join(' ')+'" aria-label="Agent and knowledge canvas">'+paths+nodes.map(n=>{
+  const [x,y]=data.positions?.[n.id]||positions.get(n.id);
+  return '<foreignObject x="'+x+'" y="'+y+'" width="200" height="180" data-node="'+esc(n.id)+'"><div xmlns="http://www.w3.org/1999/xhtml" tabindex="0" role="button" class="canvas-card '+n.type+'" data-act="'+n.type+'" data-id="'+esc(n.id)+'"><div class="kind">'+(n.type==='agent'?'Agent / '+(n.sample?'example':'configured'):n.type==='file'?'Knowledge / local':'Model / GGUF')+'</div><h3>'+esc(n.name)+'</h3><p>'+esc(n.type==='agent'?n.task:n.text?n.text.replace(/^#+ /gm,'').slice(0,180):'Registered locally. Open to inspect.')+'</p><footer>'+(n.type==='agent'?n.files.length+' connected sources':n.sample?'Example document':'On this device')+'</footer></div></foreignObject>';
+ }).join('')+'</svg><div class="graph-controls">'+btn('zoomIn','<span aria-label="Zoom in">+</span>')+btn('zoomOut','<span aria-label="Zoom out">−</span>')+btn('resetZoom','<span aria-label="Reset zoom">⌂</span>')+'</div><div class="legend"><span>KNOWLEDGE CANVAS</span><span>Drag to arrange · Scroll to zoom</span></div></div>';
+}
+function graphPanel(full=false){return '<section class="panel graph-panel">'+header('Workspace.canvas','Connected documents and agent instructions',full?'':btn('go','Expand ↗','Graph'))+graph()+'</section>'}
+function drop(kind){return '<label class="drop" data-drop="'+kind+'"><strong>'+ (kind==='Models'?'Drop GGUF models here':'Drop knowledge files here')+'</strong><small>or choose files from your device</small><input type="file" multiple '+(kind==='Models'?'accept=".gguf"':'')+'></label>'}
+function render(){
+ for(const [target,names] of [['nav',['Overview','Graph','Agents','Vault','Models']],['system',['Activity','Sharing']]])$('#'+target).innerHTML=names.map(n=>'<button class="'+(page===n?'active':'')+'" data-act="go" data-id="'+n+'">'+icon(n)+' '+({Graph:'Knowledge graph',Vault:'File vault',Models:'Local models'}[n]||n)+'</button>').join('');
+ document.body.classList.toggle('immersive',page==='Overview'||page==='Graph'); $('#crumb').textContent=page==='Overview'||page==='Graph'?'Personal space / Untitled constellation': 'Personal space / '+page;
+ const counts=[['Agents',data.agents.length,'','Agent profiles'],['Vault',data.files.length,'mint','Knowledge files'],['Models',data.models.length,'blue','Local models'],['Activity',data.logs.filter(r=>r.run).length,'peach','Completed runs']];
+ const views={
+ Overview:()=>'<div class="canvas-title"><span class="eyebrow">PERSONAL SPACE</span><h1>Your constellation</h1><p>Ideas become context. Context becomes action.</p></div>'+graphPanel(true)+'<div class="canvas-dock">'+btn('new','＋ Agent')+btn('note','＋ Note')+btn('go','Import files','Vault')+btn('go','Models','Models')+'</div><div class="canvas-status"><span>● ON DEVICE</span><span>'+data.agents.length+' agents · '+data.files.length+' documents</span></div>',
+
+ Graph:()=>intro('Knowledge graph','Select an agent, a knowledge file, or a model to inspect it.')+graphPanel(true),
+ Agents:()=>intro('Agents','Define an agent’s role, assign knowledge, and run a task.')+'<div class="panel list">'+header('Agent profiles','',btn('new','＋ New agent'))+(data.agents.map(agentRow).join('')||empty('No agent profiles yet.'))+'</div>',
+ Vault:()=>intro('File vault','Keep originals on this device. Attach text and Markdown to give agents context.')+'<div class="stack"><div class="panel pad">'+drop('Vault')+'</div><section class="panel list">'+header('Knowledge files')+(data.files.map(f=>fileRow(f)).join('')||empty('No files yet.'))+'</section></div>',
+ Models:()=>modelLibraryView(),
+ Activity:()=>intro('Activity','Review imports, agent setup, and completed task runs on this device.')+'<section class="panel">'+header('Workspace activity')+activity(data.logs)+'</section>',
+ Sharing:()=>intro('Sharing','Prepare a public snapshot using only information you explicitly enter here.')+'<section class="panel pad"><h2>Export a snapshot</h2><p>Export a self-contained public page and host it separately. Vault files, models, agent instructions, and outputs stay out of the export unless you paste that information into the summary.</p>'+btn('share','Export snapshot')+'</section><section class="panel pad"><h2>Sample data</h2><p>Remove example agents, files, and activity when you’re ready to start fresh.</p>'+btn('clearSamples','Remove sample data')+'</section>'
+ };$('#content').innerHTML=views[page]();
+}
+function modal(title,html){const d=$('#dialog');d.innerHTML=header(title,'',btn('close','Close'))+'<div class="pad">'+html+'</div>';if(!d.open)d.showModal()}
+function download(value,name,type='text/plain'){const url=URL.createObjectURL(value instanceof Blob?value:new Blob([value],{type}));const a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000)}
+async function ingest(files,kind){const models=kind==='Models', items=[];for(const file of files){if(models){const bytes=new Uint8Array(await file.slice(0,4).arrayBuffer());if(!/\.gguf$/i.test(file.name)||String.fromCharCode(...bytes)!=='GGUF'){toast('Choose a valid GGUF model file.');continue}}const item={id:crypto.randomUUID(),name:file.name,size:file.size};if(!models&&file.size<=2e6&&(/\.(txt|md|markdown|csv|tsv|json|jsonl|log|ya?ml|xml|toml|ini|rst)$/i.test(file.name)||file.type.startsWith('text/')))item.text=await file.text();items.push([item,file])}if(!items.length)return;if(await change(()=>{const group=models?data.models:data.files;for(const [item] of items){group.push(item);if(data.spaces&&activeSpace())activeSpace().members.push(item.id);log(item.name,models?'Model registered':'File imported',kind)}},models?[]:items.map(([item,file])=>[item.id,file])))toast(items.length+(items.length===1?' item added':' items added')+' to this workspace.')}
+function agentForm(a={}){modal(a.id?'Edit agent':'Set up an agent','<form id="agentForm" data-id="'+esc(a.id)+'"><label class="field">Agent name<input name="name" maxlength="60" required value="'+esc(a.name)+'"></label><label class="field">Role<input name="role" maxlength="80" required value="'+esc(a.role)+'" placeholder="Research analyst"></label><label class="field">Default task and instructions<textarea name="task" required maxlength="5000" placeholder="Explain what the agent should do and how to format its output.">'+esc(a.task)+'</textarea></label><label class="field">Local model<select name="model"><option value="">Choose later</option>'+data.models.map(m=>'<option value="'+esc(m.id)+'" '+(m.id===a.model?'selected':'')+'>'+esc(m.name)+'</option>').join('')+'</select></label><fieldset><legend>Knowledge for this agent</legend><small>Selected text is retrieved at run time. Model weights are unchanged.</small>'+data.files.filter(f=>typeof f.text==='string').map(f=>'<label><input type="checkbox" name="files" value="'+esc(f.id)+'" '+(a.files?.includes(f.id)?'checked':'')+'> '+esc(f.name)+'</label>').join('')+'</fieldset><button class="primary" type="submit">Save agent setup</button></form>')}
+function showAgent(a){const m=data.models.find(m=>m.id===a.model);modal(esc(a.name),'<p>'+esc(a.role)+' · '+(m?esc(m.name):'Model not assigned')+'</p><h3>Default task</h3><p>'+esc(a.task)+'</p><h3>Knowledge</h3><p>'+ (data.files.filter(f=>a.files.includes(f.id)).map(f=>esc(f.name)).join(', ')||'No files attached.')+'</p><div class="actions">'+btn('edit','Edit setup',a.id)+btn('deleteAgent','Remove agent',a.id)+'</div>'+(m?'<form id="runForm" data-id="'+esc(a.id)+'"><label class="field">Task for this run<textarea name="task" maxlength="5000" required>'+esc(a.task)+'</textarea></label><button type="submit" class="primary">Run locally</button><div id="runOutput" role="status"></div></form>':'<p>Assign a registered local model to run tasks.</p>')+(a.last?'<h3>Last result</h3><pre class="output">'+esc(a.last)+'</pre>':''))}
+function chooseContext(a,task){const terms=new Set((task.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu)||[]));return data.files.filter(f=>a.files.includes(f.id)&&f.text).flatMap(f=>{const items=[];for(let offset=0;offset<f.text.length;offset+=800){const excerpt=f.text.slice(offset,offset+1000);const words=new Set(excerpt.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu)||[]);let score=0;for(const t of terms)if(words.has(t))score++;items.push({name:f.name,excerpt,score})}return items}).sort((x,y)=>y.score-x.score).slice(0,4).map(f=>'File: '+f.name+'\n'+f.excerpt).join('\n\n')}
+async function run(a,task,form){if(running)return toast('A task is already running.');if(!token)return toast('Connect your runner from Local models first.');const m=data.models.find(m=>m.id===a.model), output=form.querySelector('#runOutput'), button=form.querySelector('button');if(!m)return;running=true;button.disabled=true;output.textContent='Running on your device…';try{const r=await localModelRequest({model:m.name,model_source:m.source||null,task,role:a.role,instructions:a.task,context:chooseContext(a,task)},{agent:a.id,label:a.name+' · '+task.slice(0,80)});output.className='output';output.textContent=r.output;if(data.agents.some(x=>x.id===a.id))await change(()=>{a.last=r.output;log(a.name+' completed a task','Local inference','Agents');data.logs[0].run=true})}catch(e){output.textContent=e instanceof TypeError?'Could not reach the local runner. Check that it is running and allow local network access if your browser asks.':e.message}finally{running=false;button.disabled=false}}
+async function act(action,id){
+ const a=data.agents.find(x=>x.id===id),f=data.files.find(x=>x.id===id),m=data.models.find(x=>x.id===id);
+ if(action==='go'){page=id;zoom=1;$('#dialog').close();render();window.scrollTo(0,0);return}
+ if(action==='note')return modal('New knowledge note','<form id="noteForm"><label class="field">Title<input name="title" required maxlength="100"></label><label class="field">Note<textarea name="text" required maxlength="50000"></textarea></label><button class="primary">Add to constellation</button></form>');
+ if(action==='new')return agentForm();
+ if(action==='edit'&&a)return agentForm(a);
+ if(action==='agent'&&a)return showAgent(a);
+ if(action==='close')return $('#dialog').close();
+ if(action==='zoomIn'||action==='zoomOut'||action==='resetZoom'){if(action==='resetZoom'){panX=0;panY=0;}zoom=action==='resetZoom'?1:Math.min(2.6,Math.max(.55,zoom*(action==='zoomIn'?1.22:1/1.22)));return render()}
+ if(action==='file'&&f)return modal(esc(f.name),(typeof f.text==='string'?'<pre class="output">'+esc(f.text.slice(0,16000))+'</pre>':'<p>Stored as an original file. This file type or size is unavailable for text retrieval.</p>')+'<div class="actions">'+btn('downloadFile','Download original',id)+btn('deleteFile','Remove file',id)+'</div>');
+ if(action==='model'&&m)return modal(esc(m.name),'<p>Registered on this device. Start the runner with this original GGUF to use it with an agent.</p>'+btn('deleteModel','Remove registration',id));
+ if(action==='downloadFile'&&f){const item=await blob(id)??f.text;if(item!==undefined)download(item,f.name);else toast('The original is unavailable.');return}
+ if(action==='deleteAgent'||action==='deleteFile'||action==='deleteModel'){
+  if(!await confirmRemoval('Remove '+(a?.name||f?.name||m?.name||'this item')+'?',action==='deleteFile'?'This removes the saved file and its agent connections from this profile. This cannot be undone.':action==='deleteModel'?'This removes the model registration and unassigns it from agents. The original model on your computer is not deleted.':'This removes the agent and its setup from this profile. This cannot be undone.'))return;
+  if(await change(()=>{if(action==='deleteAgent')data.agents=data.agents.filter(x=>x.id!==id);if(action==='deleteFile'){data.files=data.files.filter(x=>x.id!==id);data.agents.forEach(x=>x.files=x.files.filter(k=>k!==id))}if(action==='deleteModel'){data.models=data.models.filter(x=>x.id!==id);data.agents.forEach(x=>{if(x.model===id)x.model=''})}},[],action==='deleteFile'?[id]:[]))$('#dialog').close();return
+ }
+ if(action==='clearSamples'){if(!await confirmRemoval('Remove sample data?','Example files, agents, and sample activity will be removed from this profile. Your own records remain. This cannot be undone.'))return;await change(()=>{for(const k of ['agents','files'])data[k]=data[k].filter(x=>!x.sample);data.agents.forEach(a=>a.files=a.files.filter(id=>data.files.some(x=>x.id===id)));data.logs=data.logs.filter(x=>x.time)});return}
+ if(action==='connect')return modal('Connect local runner','<form id="connectForm"><label class="field">Runner session key<input name="key" type="password" autocomplete="off" required maxlength="256"></label><small>Copy the session key printed in the runner terminal. It stays in memory until this page closes.</small><button class="primary" type="submit">Test connection</button><p id="connection" role="status"></p></form>');
+ if(action==='share')return modal('Export snapshot','<form id="shareForm"><label class="field">Public title<input name="title" required maxlength="100"></label><label class="field">Public summary<textarea name="summary" required maxlength="10000"></textarea></label><label><input type="checkbox" required> I reviewed this text for public sharing.</label><button class="primary" type="submit">Download public page</button></form>');
+ if(action==='search'){modal('Search workspace','<label class="field">Search agents, files, and models<input id="query" type="search" autofocus></label><div class="list" id="results"></div>');search('');$('#query').focus()}
+}
+function search(query){const q=query.trim().toLowerCase(),match=(x,...values)=>[x.name,...values].join(' ').toLowerCase().includes(q);$('#results').innerHTML=(data.agents.filter(x=>match(x,x.role)).map(agentRow).join('')+data.files.filter(x=>match(x)).map(x=>fileRow(x)).join('')+data.models.filter(x=>match(x)).map(x=>fileRow(x,'Models')).join(''))||empty('No matching items.')}
+function report(e){toast(e?.message||'Something went wrong.')}
+document.addEventListener('click',e=>{const target=e.target.closest('[data-act]');if(target)act(target.dataset.act,target.dataset.id).catch(report)});
+document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();if(data){if(document.body.classList.contains('mindspace'))studioCommand('search').catch(report);else act('search').catch(report)}}if(e.target.closest('.node')&&['Enter',' '].includes(e.key)){e.preventDefault();const n=e.target.closest('.node');act(n.dataset.act,n.dataset.id).catch(report)}});
+document.addEventListener('input',e=>{if(e.target.id==='query')search(e.target.value)});
+document.addEventListener('change',e=>{const target=e.target.closest('[data-drop]');if(target&&e.target.files)ingest([...e.target.files],target.dataset.drop).catch(report)});
+document.addEventListener('dragover',e=>{const target=e.target.closest('[data-drop]');if(target){e.preventDefault();target.classList.add('drag')}});
+document.addEventListener('dragleave',e=>e.target.closest('[data-drop]')?.classList.remove('drag'));
+document.addEventListener('drop',e=>{if(!e.dataTransfer?.types.includes('Files'))return;e.preventDefault();const target=e.target.closest('[data-drop]');if(target){target.classList.remove('drag');ingest([...e.dataTransfer.files],target.dataset.drop).catch(report)}});
+document.addEventListener('submit',async e=>{
+ e.preventDefault();
+ const form=e.target, values=new FormData(form);
+ try{
+ if(form.id==='noteForm'){
+ const name=values.get('title').trim(),text=values.get('text').trim();
+ if(!name||!text)return;
+ if(await change(()=>{data.files.push({id:crypto.randomUUID(),name:name+'.md',text,size:new Blob([text]).size});log(name,'Note created','Vault')}))$('#dialog').close();
+ }
+ if(form.id==='agentForm'){
+  const existing=data.agents.find(a=>a.id===form.dataset.id),name=values.get('name').trim(),role=values.get('role').trim(),task=values.get('task').trim();
+  if(!name||!role||!task)return toast('Enter a name, role, and task.');
+  const details={name,role,task,model:values.get('model'),files:values.getAll('files'),sample:false};
+  if(await change(()=>{if(existing)Object.assign(existing,details);else data.agents.push({...details,id:crypto.randomUUID()});log(name,existing?'Agent setup updated':'Agent configured','Agents')})){$('#dialog').close();toast('Agent setup saved.')}
+ }
+ if(form.id==='runForm'){
+  const a=data.agents.find(x=>x.id===form.dataset.id),task=values.get('task').trim();if(a&&task)await run(a,task,form);
+ }
+ if(form.id==='connectForm'){
+  const key=values.get('key').trim(),out=$('#connection');out.textContent='Connecting…';
+  try{const response=await fetch(companionBase+'/status',{headers:{Authorization:'Bearer '+key},signal:AbortSignal.timeout(7000)});if(!response.ok)throw new Error('The runner rejected the session key.');const r=await response.json();token=key;out.textContent='Connected to '+r.model+'.';form.querySelector('input').value='';if(page==='Models')refreshModels().catch(report)}catch(e){out.textContent=e instanceof TypeError?'Could not reach the runner. Check that it is running and allow local network access if prompted.':e.message}
+ }
+ if(form.id==='shareForm'){
+  const title=esc(values.get('title').trim()),summary=esc(values.get('summary').trim());
+  if(!title||!summary)return toast('Enter a title and summary.');
+  const content='<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+title+'</title><style>body{font:1.05rem/1.65 Arial,sans-serif;color:#e9e8e3;background:#101113;max-width:760px;margin:4rem auto;padding:0 1.2rem}article{white-space:pre-wrap;overflow-wrap:anywhere}h1{font-family:Georgia,serif;font-weight:400}small{color:#a9abae}</style><small>Agenetic by Groundplanes · Public snapshot</small><h1>'+title+'</h1><article>'+summary+'</article></html>';
+  download(content,'agenetic-snapshot.html','text/html');$('#dialog').close();toast('Public page exported. Host the exported HTML to publish it.');
+ }
+ }catch(e){report(e)}
+});
+async function start(){await acquireVaultLock();const open=indexedDB.open('neuron-ops',1);open.onupgradeneeded=()=>{open.result.createObjectStore('state');open.result.createObjectStore('blobs')};db=await req(open);data=await req(db.transaction('state').objectStore('state').get('current'))||initial;await bootProfiles();await bootAppearance();await bootIdentity();if(new URLSearchParams(location.search).has('community'))page='Community';render();if(page==='Community')loadCommunity();$('#new').onclick=()=>act('new');$('#search').onclick=()=>act('search');await bootOnboarding()}
+window.addEventListener('DOMContentLoaded',()=>start().catch(error=>{console.error('Workspace initialization failed',error);$('#content').textContent=error.message||'The workspace could not be opened. Check browser storage.'}),{once:true});
+
+document.addEventListener('wheel',e=>{
+ if(!e.target.closest('.graph'))return;
+ e.preventDefault();
+ zoom=Math.min(3,Math.max(.35,zoom*(e.deltaY<0?1.08:1/1.08)));
+ render();
+},{passive:false});
+
+let gesture=null,ignoreClick=false;
+document.addEventListener('pointerdown',e=>{
+ const graph=e.target.closest('.graph');
+ if(!graph||e.target.closest('button')||e.button!==0)return;
+ const node=e.target.closest('[data-node]'),svg=graph.querySelector('svg');
+ const point=new DOMPoint(e.clientX,e.clientY).matrixTransform(svg.getScreenCTM().inverse());
+ gesture={id:node?.dataset.node,x:point.x,y:point.y,startX:e.clientX,startY:e.clientY,panX,panY,origin:node?[Number(node.getAttribute('x')),Number(node.getAttribute('y'))]:null,moved:false};
+});
+document.addEventListener('pointermove',e=>{
+ if(!gesture)return;
+ const svg=document.querySelector('.graph svg');if(!svg)return;
+ if(Math.hypot(e.clientX-gesture.startX,e.clientY-gesture.startY)<4&&!gesture.moved)return;
+ gesture.moved=true;
+ const scale=svg.getScreenCTM().a,dx=(e.clientX-gesture.startX)/scale,dy=(e.clientY-gesture.startY)/scale;
+ if(gesture.id){data.positions??={};data.positions[gesture.id]=[gesture.origin[0]+dx,gesture.origin[1]+dy];}
+ else{panX=gesture.panX+dx;panY=gesture.panY+dy;}
+ render();
+});
+document.addEventListener('pointerup',async()=>{
+ if(gesture?.moved){ignoreClick=true;setTimeout(()=>ignoreClick=false,50);if(gesture.id)try{await save()}catch{toast('Layout could not be saved.');}}
+ gesture=null;
+});
+document.addEventListener('click',e=>{if(ignoreClick){e.stopImmediatePropagation();e.preventDefault();}},true);

@@ -1,0 +1,4 @@
+const test=require('node:test'),assert=require('node:assert/strict'),{isLocal,externalURL,assetPath}=require('../security.cjs');
+test('desktop only trusts the bundled app origin',()=>{assert.equal(isLocal('agenetic://app/'),true);for(const u of ['https://app/','agenetic://evil/','file:///etc/passwd'])assert.equal(isLocal(u),false)});
+test('external destinations require HTTPS and known exact hosts',()=>{assert.ok(externalURL('https://groundplanes.com'));for(const u of ['https://groundplanes.com.evil.test','javascript:alert(1)','http://groundplanes.com','https://name:password@groundplanes.com'])assert.equal(externalURL(u),null)});
+test('asset resolution rejects traversal and foreign origins',()=>{assert.equal(assetPath('agenetic://app/'),'index.html');assert.throws(()=>assetPath('agenetic://app/%2e%2e%2fsecret'));assert.throws(()=>assetPath('https://evil.test/app.js'))});

@@ -1,0 +1,97 @@
+name: Windows installer
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: false
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check application tests
+        run: node --test tests/*.test.mjs
+      - name: Download pinned llama.cpp CPU runtime
+        shell: pwsh
+        run: |
+          $url = 'https://github.com/ggml-org/llama.cpp/releases/download/b12421/llama-b12421-bin-win-cpu-x64.zip'
+          Invoke-WebRequest $url -OutFile llama.zip
+          if ((Get-FileHash llama.zip -Algorithm SHA256).Hash.ToLower() -ne 'f1f53e34f24a8627991d90a1b85296b21f7cdac1c20241b9ecdf508b839ac28c') { throw 'Runtime checksum mismatch' }
+          Expand-Archive llama.zip llama
+          $cli = Get-ChildItem llama -Recurse -Filter llama-cli.exe | Select-Object -First 1
+          if (!$cli) { throw 'Runtime is missing llama-cli.exe' }
+          "LLAMA_DIRECTORY=$($cli.Directory.FullName)" >> $env:GITHUB_ENV
+          & $cli.FullName --version
+          if ($LASTEXITCODE -ne 0) { throw 'Bundled runtime failed to start' }
+      - name: Build compressed setup EXE
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/v') }}
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          AGENETIC_SIGNER_THUMBPRINT: ${{ secrets.AGENETIC_SIGNER_THUMBPRINT }}
+          AGENETIC_UPDATE_SIGNING_KEY: ${{ secrets.AGENETIC_UPDATE_SIGNING_KEY }}
+        run: |
+          if ($env:RELEASE_TAG -eq 'true') {
+            $version = (Get-Content desktop/package.json -Raw | ConvertFrom-Json).version
+            if ($env:GITHUB_REF_NAME -ne "v$version") { throw 'Tag must match desktop package version' }
+            ./desktop/scripts/build-windows.ps1 -Release -LlamaDirectory $env:LLAMA_DIRECTORY
+          } else {
+            ./desktop/scripts/build-windows.ps1 -LlamaDirectory $env:LLAMA_DIRECTORY
+          }
+      - name: Test packaged companion startup
+        shell: pwsh
+        run: python desktop/scripts/check-companion.py desktop/release/win-unpacked/resources/runtime/agenetic-companion.exe
+      - name: Record artifact hashes
+        shell: pwsh
+        run: |
+          Get-ChildItem desktop/release/*.exe | ForEach-Object { "$((Get-FileHash $_ -Algorithm SHA256).Hash.ToLower())  $($_.Name)" } | Set-Content desktop/release/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Agenetic-Windows-installer
+          path: |
+            desktop/release/*.exe
+            desktop/release/*.blockmap
+            desktop/release/*.yml
+            desktop/release/*.json
+            desktop/release/SHA256SUMS.txt
+          if-no-files-found: error
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: Agenetic-Windows-installer
+          path: release
+      - name: Publish download
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          COMMIT_SHA: ${{ github.sha }}
+          REF_NAME: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/v') }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$RELEASE_TAG" = true ]; then
+            gh release create "$REF_NAME" --target "$COMMIT_SHA" --title "Agenetic $REF_NAME" --notes "Signed Windows installer. Includes local companion, CPU inference runtime and onboarding." release/*
+          else
+            # Preview is deliberately excluded from the stable automatic-update feed.
+            tag="preview-${GITHUB_RUN_NUMBER}"
+            gh release create "$tag" --target "$COMMIT_SHA" --prerelease --title "Agenetic Windows test build ${GITHUB_RUN_NUMBER}" --notes "Unsigned test installer. Includes app, local companion and CPU runtime. No developer tools required. Automatic updates are disabled in this preview. Windows may display an unrecognized-publisher warning. Installation, persistence and model performance still need user testing." release/*.exe release/SHA256SUMS.txt
+          fi

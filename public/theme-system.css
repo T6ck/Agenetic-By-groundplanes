@@ -1,0 +1,36 @@
+/* Shared semantic surfaces for every workspace view. */
+html body{--white:var(--ax-panel);--space-surface:var(--ax-panel);--space-line:var(--ax-line);background:var(--ax-bg)!important;color:var(--ax-ink)!important;accent-color:var(--ax-accent)}
+html body #content{background:var(--ax-bg)!important}
+html body :is(aside,header,.panel,.stat,dialog,.mind-card,.space-dock,.graph-settings,.appearance-panel){background:var(--ax-panel)!important;color:var(--ax-ink)!important;border-color:var(--ax-line)!important}
+html body :is(button,.button){color:var(--ax-ink)}
+html body :is(.drop,.output,.privacy,.search,.space-list button,.message-review){background:var(--ax-bg)!important;color:var(--ax-ink)!important;border-color:var(--ax-line)!important}
+html body :is(input,textarea,select){background:var(--ax-bg)!important;color:var(--ax-ink)!important;border-color:var(--ax-line)!important}
+html body :is(p,small,.empty,.card-header,.card-bottom,.card-preview,.space-caption p,.space-caption>span,.space-footer,.local-indicator,.inspector-type,.inspector-section,.inspector-section span,.inspector-link small,.editor-save span,.library-label,.space-dock button span,.graph-settings label,.graph-settings p,.nav-label,.wiki-hint,.private-label){color:var(--ax-muted)!important}
+html body :is(h1,h2,h3,.brand,.mark,.space-caption h1,.space-switcher,.floating-heading h2){color:var(--ax-ink)!important}
+html body :is(.icon,.icon.mint,.icon.blue,.icon.peach,.avatar,.pill,.pill.green){background:var(--ax-raised)!important;color:var(--ax-accent)!important}
+html body :is(.primary,.editor-save .save-button,.community-compose button[type=submit]){background:var(--ax-accent)!important;color:var(--ax-bg)!important;border-color:var(--ax-accent)!important}
+html body :is(nav button.active,.view-switch button.active,.knowledge-explorer button.selected,.knowledge-explorer button.current){background:var(--ax-raised)!important;color:var(--ax-ink)!important}
+html body :is(button,.button):hover{background:var(--ax-raised)!important;color:var(--ax-ink)!important}
+html body :is(a,summary,.plain,.eyebrow){color:var(--ax-accent)}
+html body :is(button,input,textarea,select,a,[tabindex]):focus-visible{outline:2px solid var(--ax-accent)!important;outline-offset:3px}
+html body :is(.mind-card,.knowledge-file-list,.space-dock,.inspector-section,.inspector-actions button,.card-bottom,.knowledge-explorer-footer,.profile,.agent-row,.file-row,.activity-row,.depth-control button){border-color:var(--ax-line)!important;scrollbar-color:var(--ax-line) transparent}
+html body .mind-card.is-selected{border-color:var(--ax-accent)!important}
+html body .edge{stroke:var(--ax-muted);color:var(--ax-muted)}
+html body .edge.assignment{stroke:var(--node-task)}html body .edge.model{stroke:var(--node-model)}
+html body .card-symbol{color:var(--node-file)}html body .agent .card-symbol{color:var(--node-agent)}html body .task .card-symbol{color:var(--node-task)}html body .model .card-symbol{color:var(--node-model)}
+html body .space-stage:before{background:none}html[data-grid=false] body .space-stage{background-image:none!important}
+html[data-grid=true] body .space-stage{background-image:radial-gradient(var(--ax-line) .7px,transparent .7px)!important;background-size:28px 28px!important}
+html body .space-header{height:66px;padding:0 24px;gap:20px;border-bottom:1px solid var(--ax-line)}
+html body .brand-orbit strong{font-size:19px;font-weight:500;letter-spacing:-.55px}
+html body .space-header .header-right{display:none}
+html body .space-header .canvas-view-switch{margin-left:0}
+html body .space-header .appearance-entry{margin-left:auto}
+html body .appearance-entry{display:inline-flex;gap:8px;align-items:center;font-size:11px;padding:8px}
+html body .appearance-panel{z-index:30;position:fixed;top:76px;max-height:calc(100dvh - 90px)}
+html body .theme-preview{width:58px;min-width:58px;height:38px;gap:3px}.theme-preview i{border-radius:2px;width:7px;height:15px}
+html body #toast{background:var(--ax-raised)!important;color:var(--ax-ink)!important;border:1px solid var(--ax-line)}
+html body .angular-mark{stroke:var(--ax-ink)}
+html body .space-header .canvas-view-switch{position:static;transform:none;order:0;flex:none}
+html body .space-header .space-switcher,html body .space-header .header-divider{display:none}
+html body .space-header .brand-orbit{order:-3}html body .space-header .profile-control{order:-2}
+html body .space-header .appearance-entry{order:1;margin-left:auto}html body .space-header .community-entry{order:2;margin-left:0}

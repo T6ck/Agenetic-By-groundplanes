@@ -15,7 +15,14 @@ const productRender=render;
 render=function(){productRender();addProductControls();syncDepth()};
 const productCommunity=renderCommunity;
 renderCommunity=function(){productCommunity();addProductControls()};
-function supportAgenetic(){modal('Keep independent research open.','<section class="use-policy"><span class="section-kicker">SUPPORT AGENETIC</span><p class="policy-lead">Free to explore. Optional to support.</p><p>Donations help cover servers, keep services available, and fund ongoing updates. Personal use stays free whether you donate or not.</p><div class="billing-actions"><a href="https://donate.stripe.com/5kQ9AU2Od0JGaUTdEcaR202" target="_blank" rel="noopener noreferrer">Support Agenetic</a></div><div class="policy-row"><span>OUR COMMITMENT</span><div><h3>A little further than software.</h3><p>We will donate 5% of all donations received by Agenetic to Water.org.</p><a href="https://water.org/donate" target="_blank" rel="noopener noreferrer">Visit Water.org</a><p class="policy-detail">That link supports Water.org directly. It is separate from supporting Agenetic.</p></div></div><p class="policy-detail">Choose your amount at Stripe checkout. Suggested: $10 USD, minimum: $1. This is a one-time contribution to Groundplanes, not a commercial license or a tax-deductible charitable donation.</p></section>')}
+function supportAgenetic(){
+  modal('Support Agenetic', '<section class="use-policy">'+
+    '<p class="policy-lead">Start with $1. Keep local AI within reach.</p>'+
+    '<p>Your contribution helps a small team maintain Agenetic, keep community services online, and make it easier to run language models on hardware you already own. Local models give researchers another way to work without sending every request to a large AI data center.</p>'+
+    '<div class="billing-actions"><a href="https://donate.stripe.com/eVq9AUfAZ7845Az7fOaR203" target="_blank" rel="noopener noreferrer">Contribute from $1</a></div>'+
+    '<div class="policy-row"><span>WATER ACCESS</span><div><h3>5% goes to Water.org</h3><p>Groundplanes sets aside 5% of Agenetic donations to support Water.org’s work expanding access to safe water and sanitation.</p><a href="https://water.org/donate" target="_blank" rel="noopener noreferrer">Give directly to Water.org</a></div></div>'+
+    '<p class="policy-detail">Choose your amount at Stripe checkout. Contributions to Groundplanes are optional, one-time, and not tax-deductible. Agenetic is free for personal use.</p></section>');
+}
 function addProductControls(){
  const host=document.querySelector('.knowledge-explorer-footer')||document.querySelector('.space-footer>div')||document.querySelector('.community-nav')||document.querySelector('#system');
  if(host&&!host.querySelector('[data-support]'))host.insertAdjacentHTML('beforeend','<button class="use-policy-link" data-support><span>Support Agenetic</span></button>');

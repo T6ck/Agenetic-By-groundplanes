@@ -262,8 +262,10 @@ async function executeStep(id){
     const agent = data.agents.find(candidate => candidate.id === item.agent);
     if (!agent) throw new Error('Assign an agent to '+item.name+' before continuing.');
     const scope = agentSourceScope(agent, item, follow || agent.followLinkedNotes);
+    const sourceIds = new Set(scope.files);
+    const pdfFailures = await indexSavedPdfs(workspaceSourceFiles().filter(file=>sourceIds.has(file.id)));
     const selection = selectContext(scope, item.description || agent.task, true);
-    if (!selection.quotes?.length) throw new Error(item.name+': no matching evidence. Attach a relevant note or revise the task.');
+    if (!selection.quotes?.length) throw new Error(item.name+': '+(pdfFailures[0] || 'no matching evidence. Attach a relevant note or revise the task.'));
     const result = await saveAgentEvidence(agent, item.description || agent.task, selection, scope, item);
     results.push(item.name+(result.reused?' · reused':' · saved')+'\n'+result.output);
     output.textContent = results.join('\n\n');

@@ -79,3 +79,34 @@ with tempfile.TemporaryDirectory() as folder:
     finally:
         process.kill()
         process.wait(timeout=15)
+def sample_pdf(with_text):
+    stream = b'BT /F1 12 Tf 40 100 Td (Local PDF evidence 42) Tj ET' if with_text else b''
+    objects = [
+        b'<< /Type /Catalog /Pages 2 0 R >>',
+        b'<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+        b'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>',
+        b'<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+        b'<< /Length ' + str(len(stream)).encode() + b' >>\nstream\n' + stream + b'\nendstream',
+    ]
+    pdf = b'%PDF-1.4\n'
+    offsets = []
+    for n, obj in enumerate(objects, 1):
+        offsets.append(len(pdf))
+        pdf += f'{n} 0 obj\n'.encode() + obj + b'\nendobj\n'
+    xref = len(pdf)
+    pdf += b'xref\n0 6\n0000000000 65535 f \n'
+    pdf += b''.join(f'{offset:010d} 00000 n \n'.encode() for offset in offsets)
+    pdf += f'trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n'.encode()
+    return pdf
+
+
+parser = ([sys.executable, str(companion)] if companion.suffix == '.py' else [str(companion)])
+for with_text in (True, False):
+    parsed = subprocess.run(parser + ['--extract-pdf'], input=sample_pdf(with_text),
+                            capture_output=True, timeout=30, check=True)
+    indexed = json.loads(parsed.stdout)
+    if with_text:
+        assert indexed['pages'] == 1 and indexed['text'] == '[Page 1]\nLocal PDF evidence 42', indexed
+    else:
+        assert 'No selectable text' in indexed['error'], indexed
+print('Packaged PDF reader extracted page text and reported a source with no selectable text.')

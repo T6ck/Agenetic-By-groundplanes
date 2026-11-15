@@ -1,5 +1,6 @@
 """Agenetic local companion for llama.cpp GGUF models."""
 import argparse
+import sys
 import hmac
 import json
 from pathlib import Path
@@ -223,6 +224,47 @@ async def mcp_request(values, allowed_endpoints):
                     payload=result.model_dump(mode='json')
                     if len(json.dumps(payload))>200000:raise ValueError('Tool output exceeds the display limit. Narrow your request.')
                     return payload
+
+def extract_pdf_text():
+    """Extract plain text in an isolated, time-limited desktop child process."""
+    import io
+    import sys
+    from pypdf import PdfReader
+
+    limit = 24 * 1024 * 1024
+    content = sys.stdin.buffer.read(limit + 1)
+    if len(content) > limit or not content.startswith(b'%PDF-'):
+        return {'error': 'Choose a valid PDF under 24 MiB.'}
+    try:
+        reader = PdfReader(io.BytesIO(content))
+        if reader.is_encrypted:
+            return {'error': 'This PDF is password protected. Add an unlocked copy or a text export.'}
+        total = len(reader.pages)
+        excerpts = []
+        remaining = 500_000
+        processed = 0
+        truncated = total > 150
+        for page_index in range(min(total, 150)):
+            text = (reader.pages[page_index].extract_text() or '').strip()
+            processed += 1
+            if not text:
+                continue
+            heading = f'[Page {page_index + 1}]\n'
+            if len(heading) + len(text) > remaining:
+                excerpts.append(heading + text[:max(0, remaining - len(heading))])
+                truncated = True
+                break
+            excerpts.append(heading + text)
+            remaining -= len(heading) + len(text) + 2
+            if remaining <= 0:
+                truncated = truncated or processed < total
+                break
+        if not excerpts:
+            return {'error': 'No selectable text found. For a scanned PDF, run OCR locally or add a text export.'}
+        return {'text': '\n\n'.join(excerpts), 'pages': total, 'indexedPages': processed, 'partial': truncated}
+    except Exception:
+        return {'error': 'Could not read this PDF. Check that it opens and contains selectable text.'}
+
 
 def main():
     global ORIGIN, PORT
@@ -489,6 +531,9 @@ def main():
 
 if __name__ == "__main__":
     try:
-        main()
+        if sys.argv[1:] == ["--extract-pdf"]:
+            print(json.dumps(extract_pdf_text(), ensure_ascii=True), flush=True)
+        else:
+            main()
     except KeyboardInterrupt:
         pass

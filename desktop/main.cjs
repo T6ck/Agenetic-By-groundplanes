@@ -1,4 +1,4 @@
-const {app,BrowserWindow,protocol,net,ipcMain,dialog,shell,session}=require('electron');const {spawn}=require('node:child_process');const {randomBytes}=require('node:crypto');const path=require('node:path');const fs=require('node:fs');const {pathToFileURL}=require('node:url');const {ORIGIN,isLocal,externalURL,assetPath}=require('./security.cjs');
+const {app,BrowserWindow,protocol,net,ipcMain,dialog,shell,session}=require('electron');const {spawn,execFile}=require('node:child_process');const {randomBytes}=require('node:crypto');const path=require('node:path');const fs=require('node:fs');const {pathToFileURL}=require('node:url');const {ORIGIN,isLocal,externalURL,assetPath}=require('./security.cjs');
 protocol.registerSchemesAsPrivileged([{scheme:'agenetic',privileges:{standard:true,secure:true,supportFetchAPI:true,corsEnabled:true}}]);
 let window,child,connectionError='',closing=false;
 let connectionResolve;const connection=new Promise(resolve=>connectionResolve=resolve);
@@ -37,6 +37,31 @@ app.whenReady().then(async()=>{
  session.defaultSession.setPermissionRequestHandler((_wc,_permission,callback)=>callback(false));session.defaultSession.setPermissionCheckHandler(()=>false);
  protocol.handle('agenetic',async request=>{try{const u=new URL(request.url);if(!isLocal(u.href))return new Response('Denied',{status:403});if(u.pathname==='/api/session')return Response.json({signedIn:false,scope:'guest',signIn:'https://neuron-ops.enchantingflora5.chatgpt.site',signOut:'#'});if(u.pathname==='/api/models'){const {modelCatalog}=await import(pathToFileURL(path.join(__dirname,'renderer/model-catalog.mjs')).href);try{return Response.json(await modelCatalog(u.searchParams))}catch(e){return Response.json({error:e.message},{status:502})}}
  if(u.pathname.startsWith('/api/'))return Response.json({error:'Community opens separately in your browser.'},{status:503});const file=path.resolve(__dirname,'renderer',assetPath(u.href));if(!file.startsWith(path.resolve(__dirname,'renderer')+path.sep))return new Response('Denied',{status:403});return net.fetch(pathToFileURL(file).href)}catch{return new Response('Not found',{status:404})}});
+ let pdfParsing = false;
+ ipcMain.handle('vault:extract-pdf', async (event, bytes) => {
+  verify(event);
+  if (!ArrayBuffer.isView(bytes) || bytes.byteLength > 24 * 1024 * 1024) {
+   return {error: 'Choose a valid PDF under 24 MiB.'};
+  }
+  if (pdfParsing) return {error: 'Another PDF is being indexed. Try again after it finishes.'};
+  const runtime = app.isPackaged ? process.resourcesPath : __dirname;
+  const executable = path.join(runtime, 'runtime', process.platform === 'win32' ? 'agenetic-companion.exe' : 'agenetic-companion');
+  pdfParsing = true;
+  try {
+   return await new Promise(resolve => {
+    const child = execFile(executable, ['--extract-pdf'], {
+     windowsHide: true, timeout: 30000, maxBuffer: 8 * 1024 * 1024,
+     env: {SYSTEMROOT: process.env.SYSTEMROOT, PATH: process.env.PATH, TEMP: process.env.TEMP, TMP: process.env.TMP}
+    }, (error, stdout) => {
+     if (error) return resolve({error: 'PDF indexing timed out or failed. Try a smaller PDF or a text export.'});
+     try {resolve(JSON.parse(stdout));}
+     catch {resolve({error: 'The PDF reader returned an invalid result.'});}
+    });
+    child.stdin.on('error', () => {});
+    child.stdin.end(Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength));
+   });
+  } finally {pdfParsing = false;}
+ });
  ipcMain.handle('models:catalog',async(event,values)=>{verify(event);try{const {modelCatalog}=await import(pathToFileURL(path.join(__dirname,'renderer/model-catalog.mjs')).href);const params=new URLSearchParams();for(const key of ['repo','query','revision'])if(typeof values?.[key]==='string')params.set(key,values[key]);return await modelCatalog(params)}catch(e){return {error:e.message}}});
  const runtimeRoutes = new Map([
   ['/models', 30000], ['/hub/search', 30000], ['/hub/inspect', 30000],

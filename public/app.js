@@ -60,7 +60,101 @@ function render(){
 }
 function modal(title,html){const d=$('#dialog');d.innerHTML=header(title,'',btn('close','Close'))+'<div class="pad">'+html+'</div>';if(!d.open)d.showModal()}
 function download(value,name,type='text/plain'){const url=URL.createObjectURL(value instanceof Blob?value:new Blob([value],{type}));const a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000)}
-async function ingest(files,kind){const models=kind==='Models', items=[];let skippedModel=false;for(const file of files){if(!models&&/\.gguf$/i.test(file.name)){skippedModel=true;continue;}if(models){const bytes=new Uint8Array(await file.slice(0,4).arrayBuffer());if(!/\.gguf$/i.test(file.name)||String.fromCharCode(...bytes)!=='GGUF'){toast('Choose a valid GGUF model file.');continue}}const item={id:crypto.randomUUID(),name:file.name,size:file.size};if(!models&&file.size<=2e6&&(/\.(txt|md|markdown|csv|tsv|json|jsonl|log|ya?ml|xml|toml|ini|rst)$/i.test(file.name)||file.type.startsWith('text/')))item.text=await file.text();items.push([item,file])}if(!items.length){if(skippedModel)toast('Open Local models and choose Existing GGUF to add model weights.');return;}if(await change(()=>{const group=models?data.models:data.files;for(const [item] of items){group.push(item);if(data.spaces&&activeSpace())activeSpace().members.push(item.id);log(item.name,models?'Model registered':'File imported',kind)}},models?[]:items.map(([item,file])=>[item.id,file])))toast(items.length+(items.length===1?' item added':' items added')+' to this workspace.'+(skippedModel?' Open Local models for GGUF files.':''))}
+function workspaceSourceFiles(){
+ const space = activeSpace();
+ const members = new Set(space.members);
+ const hidden = new Set(space.hidden || []);
+ return data.files.filter(file => !hidden.has(file.id) &&
+  (space.id === 'home' ? data.profile?.demo || !file.sample : members.has(file.id)));
+}
+function isPdf(file){
+ return file.type === 'application/pdf' || /\.pdf$/i.test(file.name || '');
+}
+async function extractSourcePdf(file){
+ if (!window.ageneticDesktop?.extractPdf) return {error: 'PDF text extraction is available in the Windows app. You can also attach a local text export.'};
+ if (file.size > 24 * 1024 * 1024) return {error: 'This PDF exceeds the 24 MiB indexing limit. Split it into smaller files or attach a text export.'};
+ try {
+  return await window.ageneticDesktop.extractPdf(new Uint8Array(await file.arrayBuffer()));
+ } catch {
+  return {error: 'Could not read the saved PDF. Try opening it or adding a text export.'};
+ }
+}
+function applyPdfIndex(file, result){
+ if (typeof result?.text === 'string' && result.text.trim()) {
+  file.text = result.text;
+  file.pdfIndex = {pages: result.pages, indexedPages: result.indexedPages, partial: !!result.partial};
+ } else file.pdfIndex = {error: result?.error || 'No readable text was extracted from this PDF.'};
+}
+let pdfIndexing = false;
+async function indexSavedPdfs(files, retry = false){
+ if (!window.ageneticDesktop?.extractPdf || pdfIndexing) return [];
+ const record = data, workspace = activeSpace().id;
+ const updated = [];
+ const failures = [];
+ pdfIndexing = true;
+ try {
+  for (const file of files.filter(item => !item.text?.trim() && (!item.pdfIndex?.error || retry))) {
+   if (data !== record || activeSpace().id !== workspace) break;
+   if (!file.size && !isPdf(file)) continue;
+   const original = await blob(file.id);
+   if (!original) {
+    if (isPdf(file)) failures.push(file.name + ': The original PDF is missing.');
+    continue;
+   }
+   if (!isPdf(file) && !isPdf(original)) continue;
+   const result = await extractSourcePdf(original);
+   if (data !== record || activeSpace().id !== workspace || !record.files.includes(file) || file.text?.trim()) break;
+   updated.push({file, previousText: file.text, previousIndex: file.pdfIndex});
+   applyPdfIndex(file, result);
+   if (file.pdfIndex.error) failures.push(file.name + ': ' + file.pdfIndex.error);
+  }
+  if (updated.length) {
+   if (data !== record || activeSpace().id !== workspace) throw new Error('Return to this workspace to finish PDF indexing.');
+   await save();
+  }
+  return failures;
+ } catch (error) {
+  for (const {file, previousText, previousIndex} of updated) {
+   file.text = previousText;
+   file.pdfIndex = previousIndex;
+  }
+  throw error;
+ } finally {pdfIndexing = false;}
+}
+function sourcePicker(legend){
+ const files = workspaceSourceFiles();
+ const readable = files.filter(file => file.text?.trim());
+ const rejected = files.filter(file => file.pdfIndex?.error);
+ return '<fieldset data-readable-picker><legend>'+esc(legend)+'</legend><div data-readable-options>'+
+  (readable.map(file => '<label><input type="checkbox" name="sources" value="'+esc(file.id)+'"> '+esc(file.name)+
+   (file.pdfIndex?.partial?' · partial PDF text':'')+'</label>').join('')||'<p>No readable sources in this workspace yet.</p>')+
+  '</div>'+(files.some(file=>!file.text?.trim()&&file.size)?'<button type="button" data-index-pdfs>Index saved PDFs</button>':'')+
+  '<p data-pdf-status role="status">'+esc(rejected.map(file=>file.name+': '+file.pdfIndex.error).slice(0,3).join(' '))+'</p></fieldset>';
+}
+document.addEventListener('click', async event => {
+ const button = event.target.closest('[data-index-pdfs]');
+ if (!button) return;
+ const host = button.closest('[data-readable-picker]');
+ const status = host.querySelector('[data-pdf-status]');
+ button.disabled = true;
+ status.textContent = 'Reading saved PDFs on this device…';
+ try {
+  if (!window.ageneticDesktop?.extractPdf) throw new Error('Open the Windows app to index PDFs, or attach a text export in this workspace.');
+  const selected = new Set([...host.querySelectorAll('input:checked')].map(input=>input.value));
+  const failures = await indexSavedPdfs(workspaceSourceFiles(), true);
+  if (!host.isConnected) return;
+  const legend = host.querySelector('legend').textContent;
+  const replacement = document.createElement('div');
+  replacement.innerHTML = sourcePicker(legend);
+  const picker = replacement.firstElementChild;
+  for (const input of picker.querySelectorAll('input')) input.checked = selected.has(input.value);
+  picker.querySelector('[data-pdf-status]').textContent = failures.join(' ') || 'PDF indexing complete. Select from the readable sources above.';
+  host.replaceWith(picker);
+ } catch (error) {status.textContent = error.message;}
+ finally {button.disabled = false;}
+});
+
+async function ingest(files,kind){const models=kind==='Models', items=[];let skippedModel=false,pdfFailures=[];const origin=data,space=activeSpace().id;for(const file of files){if(!models&&/\.gguf$/i.test(file.name)){skippedModel=true;continue;}if(models){const bytes=new Uint8Array(await file.slice(0,4).arrayBuffer());if(!/\.gguf$/i.test(file.name)||String.fromCharCode(...bytes)!=='GGUF'){toast('Choose a valid GGUF model file.');continue}}const item={id:crypto.randomUUID(),name:file.name,size:file.size};if(!models&&isPdf(file)){toast('Reading '+file.name+' on this device…');applyPdfIndex(item,await extractSourcePdf(file));if(item.pdfIndex.error)pdfFailures.push(file.name+': '+item.pdfIndex.error);}else if(!models&&file.size<=2e6&&(/\.(txt|md|markdown|csv|tsv|json|jsonl|log|ya?ml|xml|toml|ini|rst)$/i.test(file.name)||file.type.startsWith('text/')))item.text=await file.text();items.push([item,file])}if(!items.length){if(skippedModel)toast('Open Local models and choose Existing GGUF to add model weights.');return;}if(data!==origin||activeSpace().id!==space){toast('Return to the original workspace and import again.');return;}if(await change(()=>{const group=models?data.models:data.files;for(const [item] of items){group.push(item);if(data.spaces&&activeSpace())activeSpace().members.push(item.id);log(item.name,models?'Model registered':'File imported',kind)}},models?[]:items.map(([item,file])=>[item.id,file])))toast(items.length+(items.length===1?' item added':' items added')+' to this workspace.'+(skippedModel?' Open Local models for GGUF files.':'')+(pdfFailures.length?' '+pdfFailures[0]:''))}
 function agentForm(a={}){modal(a.id?'Edit agent':'Set up an agent','<form id="agentForm" data-id="'+esc(a.id)+'"><label class="field">Agent name<input name="name" maxlength="60" required value="'+esc(a.name)+'"></label><label class="field">Role<input name="role" maxlength="80" required value="'+esc(a.role)+'" placeholder="Research analyst"></label><label class="field">Default task and instructions<textarea name="task" required maxlength="5000" placeholder="Explain what the agent should do and how to format its output.">'+esc(a.task)+'</textarea></label><label class="field">Local model<select name="model"><option value="">Choose later</option>'+data.models.map(m=>'<option value="'+esc(m.id)+'" '+(m.id===a.model?'selected':'')+'>'+esc(m.name)+'</option>').join('')+'</select></label><fieldset><legend>Knowledge for this agent</legend><small>Selected text is retrieved at run time. Model weights are unchanged.</small>'+data.files.filter(f=>typeof f.text==='string').map(f=>'<label><input type="checkbox" name="files" value="'+esc(f.id)+'" '+(a.files?.includes(f.id)?'checked':'')+'> '+esc(f.name)+'</label>').join('')+'</fieldset><label class="setup-check"><input type="checkbox" name="follow" '+(a.followLinkedNotes?'checked':'')+'> Follow one hop from connected notes by default</label><button class="primary" type="submit">Save agent setup</button></form>')}
 function agentSourceScope(agent, step, followLinks){
  const space = activeSpace();
@@ -190,8 +284,21 @@ async function run(agent, task, form){
  const scope = agentSourceScope(agent, step, form.elements.follow.checked);
  output.textContent = '';
  if (!scope.files.length) {progress.textContent = 'Connect a readable note to this agent in the current workspace.';return;}
+ let pdfFailures = [];
+ if (window.ageneticDesktop?.extractPdf) {
+  running = true;
+  progress.textContent = 'Checking connected files for readable text…';
+  try {pdfFailures = await indexSavedPdfs(workspaceSourceFiles().filter(file=>scope.files.includes(file.id)));}
+  catch (error) {progress.textContent = error.message;return;}
+  finally {running = false;}
+  if (data !== scope.record || activeSpace().id !== scope.workspace || !form.isConnected) return;
+ }
  const context = selectContext(scope, task, mode === 'evidence');
- if (!context.sources.length) {progress.textContent = 'No matching evidence in the connected readable notes. Attach a source or refine the task.';return;}
+ if (!context.sources.length) {
+  const issue = workspaceSourceFiles().find(file=>scope.files.includes(file.id)&&file.pdfIndex?.error);
+  progress.textContent = pdfFailures[0] || (issue ? issue.name+': '+issue.pdfIndex.error : 'No matching evidence in the connected readable notes. Attach a source or refine the task.');
+  return;
+ }
  if (mode === 'evidence') {
   const submit = form.querySelector('[type="submit"]');
   running = true;

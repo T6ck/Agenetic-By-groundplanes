@@ -68,7 +68,7 @@ with tempfile.TemporaryDirectory() as folder:
         payload = {
             'model': model['name'], 'model_id': model['id'], 'role': 'Story writer',
             'instructions': 'Write a short story.', 'task': 'Once upon a time there was a small bird.',
-            'context': 'File: Story notes\nA small bird learns to fly.', 'request_id': str(uuid.uuid4()),
+            'context': 'File: Story notes\n' + 'A small bird learns to fly. ' * 35, 'request_id': str(uuid.uuid4()),
         }
         assert call('/run', {**payload, 'model_id': '0' * 24})[0] == 409
         assert call('/run', {**payload, 'model_source': {'revision': 'incorrect'}})[0] == 409

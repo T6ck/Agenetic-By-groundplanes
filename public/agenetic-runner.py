@@ -67,7 +67,14 @@ def generated_text(stdout, prompt):
     if marker:
         return re.sub(r'\s*\nExiting\.\.\.\s*$', '', tail).strip()
     if 'Loading model...' in stdout and 'available commands:' in stdout:
-        return ''
+        # llama-cli prints a 500-character preview for longer prompts.
+        _, preview_marker, preview = stdout.partition('\n> ')
+        if not preview_marker:
+            return ''
+        echoed, truncated, tail = preview.partition(' ... (truncated)\n')
+        if not truncated or not echoed or not prompt.startswith(echoed):
+            return ''
+        return re.sub(r'\s*\nExiting\.\.\.\s*$', '', tail).strip()
     return stdout.strip()
 
 

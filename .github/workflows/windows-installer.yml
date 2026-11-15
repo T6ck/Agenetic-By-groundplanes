@@ -51,9 +51,14 @@ jobs:
           } else {
             ./desktop/scripts/build-windows.ps1 -LlamaDirectory $env:LLAMA_DIRECTORY
           }
-      - name: Test packaged companion startup
+      - name: Verify GGUF registration and inference with the packaged Windows runtime
         shell: pwsh
-        run: python desktop/scripts/check-companion.py desktop/release/win-unpacked/resources/runtime/agenetic-companion.exe
+        run: |
+          $modelUrl = 'https://huggingface.co/ggml-org/models/resolve/main/tinyllamas/stories260K.gguf'
+          Invoke-WebRequest $modelUrl -OutFile smoke.gguf
+          if ((Get-FileHash smoke.gguf -Algorithm SHA256).Hash.ToLower() -ne '270cba1bd5109f42d03350f60406024560464db173c0e387d91f0426d3bd256d') { throw 'Smoke-test GGUF checksum mismatch' }
+          $runtime = 'desktop/release/win-unpacked/resources/runtime'
+          python desktop/scripts/check-companion.py "$runtime/agenetic-companion.exe" "$runtime/llama-cli.exe" smoke.gguf
       - name: Record artifact hashes
         shell: pwsh
         run: |

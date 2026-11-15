@@ -25,7 +25,7 @@ document.addEventListener('click',async e=>{
  if(!setupDialog?.open)return;setupBusy=true;b.disabled=true;
  try{
   if(b.dataset.setupTheme){appearance().theme=b.dataset.setupTheme;appearance().customTheme=null;await save();render();drawSetup();return}
-  if(b.hasAttribute('data-setup-model')){const result=await window.ageneticDesktop.chooseModel();if(result.error)throw Error(result.error);if(!result.cancelled){appearance().onboarding={...appearance().onboarding,modelMessage:'GGUF registered on this device. Verify inference from Models after setup.'};await save();drawSetup()}return}
+  if(b.hasAttribute('data-setup-model')){const model=await pickCompanionModel();if(model){appearance().onboarding={...appearance().onboarding,modelMessage:model.name+' added to this workspace. Run a short task after setup to verify inference.'};await save();drawSetup()}return}
   if(b.hasAttribute('data-setup-back')){setupStep=Math.max(0,setupStep-1);await saveSetupProgress();drawSetup();return}
   if(setupStep===1){const name=setupDialog.querySelector('#setup-name').value.trim();if(!name)throw Error('Enter a display name to continue.');localIdentity={...localIdentity,name};await persistIdentity(localIdentity)}
   if(setupStep===3){if(!setupDialog.querySelector('#setup-storage').checked)throw Error('Please acknowledge the local backup responsibility.');appearance().onboarding={...appearance().onboarding,storageAcknowledged:true}}

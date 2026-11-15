@@ -11,14 +11,59 @@ async function startCompanion(){const root=app.isPackaged?process.resourcesPath:
  child.stdout.on('data',chunk=>{buffer+=chunk.toString();if(buffer.length>8192)buffer=buffer.slice(-8192);for(const line of buffer.split('\n')){try{const info=JSON.parse(line);if(!settled&&info.event==='ready'&&Number.isInteger(info.port)&&info.port>0&&info.port<65536){settled=true;clearTimeout(timeout);connectionResolve({base:'http://127.0.0.1:'+info.port,key})}}catch{}}});
  child.on('error',()=>{clearTimeout(timeout);connectionError='Companion could not start.';connectionResolve({error:connectionError})});child.on('exit',()=>{clearTimeout(timeout);connectionError='Companion stopped. Restart Agenetic to reconnect.';connectionResolve({error:connectionError});if(!closing&&window)dialog.showMessageBox(window,{type:'error',message:connectionError})});child.stderr.on('data',()=>{});
 }
+// The renderer picks an operation. Only the main process selects a destination or file path.
+async function requestCompanion(route, payload, timeout) {
+ const ready = await connection;
+ if (connectionError || ready.error) return {error: connectionError || ready.error};
+ const body = payload === undefined ? undefined : JSON.stringify(payload);
+ if (body && Buffer.byteLength(body) > 65536) return {error: 'Companion request is too large.'};
+ try {
+  const response = await fetch(ready.base + route, {
+   method: body === undefined ? 'GET' : 'POST',
+   headers: {Origin: ORIGIN, Authorization: 'Bearer ' + ready.key, ...(body === undefined ? {} : {'Content-Type': 'application/json'})},
+   body,
+   redirect: 'error',
+   signal: AbortSignal.timeout(timeout)
+  });
+  const result = await response.json();
+  return response.ok ? result : {error: result.error || 'Companion operation failed.'};
+ } catch (error) {
+  return {error: error.name === 'TimeoutError'
+   ? 'The local companion did not respond before the request timed out.'
+   : 'Could not reach the local companion. Restart Agenetic and try again.'};
+ }
+}
 app.whenReady().then(async()=>{
  session.defaultSession.setPermissionRequestHandler((_wc,_permission,callback)=>callback(false));session.defaultSession.setPermissionCheckHandler(()=>false);
  protocol.handle('agenetic',async request=>{try{const u=new URL(request.url);if(!isLocal(u.href))return new Response('Denied',{status:403});if(u.pathname==='/api/session')return Response.json({signedIn:false,scope:'guest',signIn:'https://neuron-ops.enchantingflora5.chatgpt.site',signOut:'#'});if(u.pathname==='/api/models'){const {modelCatalog}=await import(pathToFileURL(path.join(__dirname,'renderer/model-catalog.mjs')).href);try{return Response.json(await modelCatalog(u.searchParams))}catch(e){return Response.json({error:e.message},{status:502})}}
  if(u.pathname.startsWith('/api/'))return Response.json({error:'Community opens separately in your browser.'},{status:503});const file=path.resolve(__dirname,'renderer',assetPath(u.href));if(!file.startsWith(path.resolve(__dirname,'renderer')+path.sep))return new Response('Denied',{status:403});return net.fetch(pathToFileURL(file).href)}catch{return new Response('Not found',{status:404})}});
  ipcMain.handle('models:catalog',async(event,values)=>{verify(event);try{const {modelCatalog}=await import(pathToFileURL(path.join(__dirname,'renderer/model-catalog.mjs')).href);const params=new URLSearchParams();for(const key of ['repo','query','revision'])if(typeof values?.[key]==='string')params.set(key,values[key]);return await modelCatalog(params)}catch(e){return {error:e.message}}});
- ipcMain.handle('models:request',async(event,route,payload)=>{verify(event);try{const allowed=new Set(['/models','/hub/search','/hub/inspect','/hub/download','/models/activate']);if(!allowed.has(route))throw Error('Unsupported model operation');if(route==='/models'&&payload)throw Error('Unsupported model operation');const c=await connection;if(c.error)throw Error(c.error);if(JSON.stringify(payload||{}).length>8192)throw Error('Model request is too large');const r=await fetch(c.base+route,{method:payload?'POST':'GET',headers:{Origin:ORIGIN,Authorization:'Bearer '+c.key,...(payload?{'Content-Type':'application/json'}:{})},...(payload?{body:JSON.stringify(payload)}:{}),signal:AbortSignal.timeout(30000)});const out=await r.json();return r.ok?out:{error:out.error||'Model operation failed'}}catch(e){return {error:e.message}}});
- ipcMain.handle('companion:connection',async event=>{verify(event);return connectionError?{error:connectionError}:connection});
- ipcMain.handle('companion:choose',async event=>{verify(event);const c=await connection;if(c.error)return c;const result=await dialog.showOpenDialog(window,{properties:['openFile'],filters:[{name:'GGUF models',extensions:['gguf']}]});if(result.canceled)return {cancelled:true};const r=await fetch(c.base+'/models/register',{method:'POST',headers:{Origin:ORIGIN,Authorization:'Bearer '+c.key,'Content-Type':'application/json'},body:JSON.stringify({path:result.filePaths[0]})});return r.json()});
+ const runtimeRoutes = new Map([
+  ['/models', 30000], ['/hub/search', 30000], ['/hub/inspect', 30000],
+  ['/hub/download', 30000], ['/models/activate', 30000], ['/run', 315000],
+  ['/cancel', 10000]
+ ]);
+ ipcMain.handle('models:request', async (event, route, payload) => {
+  verify(event);
+  if (!runtimeRoutes.has(route)) return {error: 'Unsupported companion operation.'};
+  if (route === '/models' ? payload !== undefined : !payload || typeof payload !== 'object' || Array.isArray(payload)) {
+   return {error: 'Invalid companion request.'};
+  }
+  return requestCompanion(route, payload, runtimeRoutes.get(route));
+ });
+ ipcMain.handle('companion:connection', async event => {
+  verify(event);
+  return connectionError ? {error: connectionError} : connection;
+ });
+ ipcMain.handle('companion:choose', async event => {
+  verify(event);
+  const result = await dialog.showOpenDialog(window, {
+   properties: ['openFile'],
+   filters: [{name: 'GGUF models', extensions: ['gguf']}]
+  });
+  if (result.canceled || !result.filePaths.length) return {cancelled: true};
+  return requestCompanion('/models/register', {path: result.filePaths[0]}, 30000);
+ });
  ipcMain.handle('app:community',event=>{verify(event);return shell.openExternal('https://neuron-ops.enchantingflora5.chatgpt.site/?community=1')});ipcMain.handle('app:website',event=>{verify(event);return shell.openExternal('https://groundplanes.com')});
  const releasePath=path.join(process.resourcesPath,'runtime','release.json');
  let release={};try{release=JSON.parse(fs.readFileSync(releasePath,'utf8'))}catch{}

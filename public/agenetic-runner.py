@@ -56,13 +56,28 @@ class ModelLibrary:
     @staticmethod
     def public(m):return {k:v for k,v in m.items() if k!='path'}
     def register(self,path,source=None):
-        path=Path(path).resolve()
-        with path.open('rb') as f:
-            if f.read(4)!=b'GGUF':raise ValueError('This file is not a GGUF model.')
-        m={'id':hashlib.sha256(str(path).encode()).hexdigest()[:24],'name':path.name,'size':path.stat().st_size,'path':str(path),'source':source}
+        path = Path(path).resolve()
+        if path.suffix.lower() != '.gguf':
+            raise ValueError('Choose a file ending in .gguf.')
+        if re.search(r'-\d{5}-of-\d{5}\.gguf$', path.name, re.IGNORECASE):
+            raise ValueError('Choose a single-file GGUF. Split models are not supported.')
+        try:
+            with path.open('rb') as source_file:
+                if source_file.read(4) != b'GGUF':
+                    raise ValueError('This file is not a GGUF model. Check that the download completed.')
+            size = path.stat().st_size
+        except OSError as error:
+            raise ValueError('Could not read the GGUF file. Check that it is available locally and that you can open it.') from error
+        m={'id':hashlib.sha256(str(path).encode()).hexdigest()[:24],'name':path.name,'size':size,'path':str(path),'source':source}
         with self.lock:
-            self.models=[x for x in self.models if x['id']!=m['id']]+[m]
-            tmp=self.registry.with_suffix('.tmp');tmp.write_text(json.dumps(self.models));tmp.replace(self.registry)
+            models = [item for item in self.models if item['id'] != m['id']] + [m]
+            tmp = self.registry.with_suffix('.tmp')
+            try:
+                tmp.write_text(json.dumps(models), encoding='utf-8')
+                tmp.replace(self.registry)
+            except OSError as error:
+                raise ValueError('Could not save the local model library. Check available space and folder permissions.') from error
+            self.models = models
         return self.public(m)
     def download(self,v):
         repo,revision,filename=self.reference(v)
@@ -299,19 +314,29 @@ def main():
                         raise ValueError()
             except (ValueError, OSError, UnicodeError):
                 return self.send_json(400, {"error": "Invalid task payload."})
-            if not model or values["model"] != model.name:
-                return self.send_json(409, {"error": "Restart the runner with the GGUF assigned to this agent."})
             if not executable:
                 return self.send_json(503,{"error":"Install llama.cpp and restart the companion for inference."})
             if not busy.acquire(blocking=False):
                 return self.send_json(409, {"error": "The runner is already processing a task."})
             try:
-                run_model=model
-                if values["model"] != run_model.name:return self.send_json(409,{"error":"Active model changed. Retry with the selected model."})
-                expected=values.get('model_source')
-                active=next((m for m in library.models if m['path']==str(run_model)),None)
-                if expected and (not active or active.get('source')!=expected):
-                    return self.send_json(409,{'error':'Select the exact Hugging Face revision required by this workflow.'})
+                model_id = values.get('model_id')
+                if model_id is not None and (not isinstance(model_id, str) or not re.fullmatch(r'[a-f0-9]{24}', model_id)):
+                    return self.send_json(400, {'error': 'Invalid local model ID.'})
+                if model_id is not None:
+                    selected = next((item for item in library.models if item['id'] == model_id), None)
+                    if not selected or selected['name'] != values['model']:
+                        return self.send_json(409, {'error': 'This workspace model is unavailable. Choose its GGUF again from Local models.'})
+                    run_model = Path(selected['path'])
+                else:
+                    run_model = model
+                    if not run_model or run_model.name != values['model']:
+                        return self.send_json(409, {'error': 'Select the assigned GGUF in Local models using Use in workspace, then retry.'})
+                    selected = next((item for item in library.models if item['path'] == str(run_model)), None)
+                if not run_model.is_file():
+                    return self.send_json(409, {'error': 'The model file was moved or removed. Choose its GGUF again from Local models.'})
+                expected = values.get('model_source')
+                if expected and (not selected or selected.get('source') != expected):
+                    return self.send_json(409, {'error': 'Select the exact Hugging Face revision required by this workflow.'})
                 request_id=values.get('request_id')
                 if request_id is not None and (not isinstance(request_id,str) or not re.fullmatch(r'[a-f0-9-]{36}',request_id)):
                     return self.send_json(400,{'error':'Invalid execution ID.'})
@@ -329,7 +354,8 @@ def main():
                     result = subprocess.Popen(
                         [executable, "-m", str(run_model), "-f", str(source), "-st",
                          "--no-display-prompt", "-n", "640", "-c", "8192"],
-                        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                        stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                        creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
                         encoding="utf-8", errors="replace",
                     )
                     with execution_lock:active_execution.update(id=request_id,process=result)

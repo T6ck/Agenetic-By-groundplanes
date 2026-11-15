@@ -45,3 +45,19 @@ html body.mindspace #content .community-shell>.community-compose{position:sticky
 @media (max-width: 1080px) {
   .network-footer { flex-wrap: wrap; justify-content: flex-start; gap: 6px 10px; }
 }
+
+@media (max-width: 760px) {
+  html[data-explorer-collapsed="false"] body.knowledge-mode #content .knowledge-explorer {
+    display: flex;
+    width: min(270px, calc(100% - 38px));
+    top: 76px;
+    bottom: 12px;
+    left: 8px;
+    z-index: 8;
+    overflow: hidden;
+    background: var(--ax-panel) !important;
+    border: 1px solid var(--ax-line) !important;
+    border-radius: 14px;
+  }
+  html body.knowledge-mode .network-stage { left: 0 !important; }
+}

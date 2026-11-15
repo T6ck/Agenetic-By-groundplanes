@@ -70,6 +70,10 @@ studioLinks=function() {
   }
   return links;
 };
+function matchesExplorerQuery(node, query) {
+  return !query || [node.name,node.text,node.task,node.description]
+    .some(value=>typeof value==='string'&&value.toLowerCase().includes(query));
+}
 function networkData() {
   let nodes=spaceNodes(),links=studioLinks();
   if(network.focus) {
@@ -81,7 +85,7 @@ function networkData() {
     nodes=nodes.filter(n=>included.has(n.id));
   }
   const query=network.search.trim().toLowerCase();
-  nodes=nodes.filter(n=>network.types.has(n.kind)&&(!query||[n.name,n.text,n.task,n.description].join(' ').toLowerCase().includes(query)));
+  nodes=nodes.filter(n=>network.types.has(n.kind)&&matchesExplorerQuery(n,query));
   const ids=new Set(nodes.map(n=>n.id));links=links.filter(l=>ids.has(l.from)&&ids.has(l.to));
   return {nodes,links};
 }
@@ -248,13 +252,15 @@ function renderNetwork() {
   calculateNetwork();
   document.body.classList.add('mindspace','knowledge-mode');document.body.classList.remove('studio','immersive');
   const {nodes,links}=networkData();
+  const query=network.search.trim().toLowerCase();
+  const explorerNodes=spaceNodes().filter(node=>matchesExplorerQuery(node,query));
   if(network.previousCount===0&&nodes.length)network.needFit=true;network.previousCount=nodes.length;
   const selected=studioNodes().find(n=>n.id===network.focus);
   $('#content').innerHTML='<header class="knowledge-header"><div class="knowledge-brand">'+brandMark()+'<div class="brand-family"><strong>Agenetic</strong><small>by Groundplanes</small></div></div><button data-command="spaces" class="knowledge-space">'+esc(space.name)+lineIcon('chevron')+'</button><div class="view-switch" aria-label="Workspace view">'+networkButton('graph',lineIcon('graph')+'Graph','','class="active" aria-pressed="true"')+networkButton('canvas',lineIcon('canvas')+'Canvas','','aria-pressed="false"')+'</div><div class="knowledge-header-actions"><span class="private-label">'+(space.id===data.exampleSpaceId?'Example data':'Local workspace')+'</span>'+networkButton('appearance',lineIcon('palette')+'Appearance','','aria-label="Appearance"')+''+networkButton('filters',lineIcon('settings'),'','aria-label="Graph settings" aria-expanded="'+network.settings+'"')+studioButton('share',lineIcon('download')+'Export','','aria-label="Export workflow"')+'</div></header>'+
-  '<aside class="knowledge-explorer"><div class="explorer-title"><span>EXPLORER</span>'+studioButton('note',lineIcon('plus'),'','aria-label="New note"')+'</div><label class="knowledge-search">'+lineIcon('search')+'<input id="knowledge-query" type="search" value="'+esc(network.search)+'" placeholder="Search this space" aria-label="Search this space"></label><div class="space-navigation">'+networkButton('all',lineIcon('graph')+'All connections','','class="'+(!network.focus?'current':'')+'"')+'</div><div class="knowledge-file-list">'+['file','agent','task','model'].map(kind=>{
-    const items=spaceNodes().filter(n=>n.kind===kind);if(!items.length)return '';
+  '<aside id="graph-explorer" class="knowledge-explorer" aria-label="Graph explorer"><div class="explorer-title"><span>EXPLORER</span>'+studioButton('note',lineIcon('plus'),'','aria-label="New note"')+'</div><label class="knowledge-search">'+lineIcon('search')+'<input id="knowledge-query" type="search" value="'+esc(network.search)+'" placeholder="Search this space" aria-label="Search this space"></label><div class="space-navigation">'+networkButton('all',lineIcon('graph')+'All connections','','class="'+(!network.focus?'current':'')+'"')+'</div><div class="knowledge-file-list">'+['file','agent','task','model'].map(kind=>{
+    const items=explorerNodes.filter(n=>n.kind===kind);if(!items.length)return '';
     return '<details open><summary>'+({file:'Knowledge',agent:'Agents',task:'Workflow',model:'Models'}[kind])+'<span>'+items.length+'</span></summary>'+items.map(n=>networkButton('open',lineIcon({file:'note',agent:'agent',task:'task',model:'model'}[kind])+'<span>'+esc(n.name)+'</span>',n.id,'class="'+(studio.selected.has(n.id)?'selected':'')+'"')).join('')+'</details>';
-  }).join('')+'</div><div class="knowledge-explorer-footer">'+studioButton('import',lineIcon('folder')+'Import files')+studioButton('runtime',lineIcon('model')+'Local models')+networkButton('example',lineIcon('graph')+'Explore example space')+'</div></aside>'+
+  }).join('')+(!explorerNodes.length&&query?'<p role="status">No matching items in this workspace.</p>':'')+'</div><div class="knowledge-explorer-footer">'+studioButton('import',lineIcon('folder')+'Import files')+studioButton('runtime',lineIcon('model')+'Local models')+networkButton('example',lineIcon('graph')+'Explore example space')+'</div></aside>'+
   '<main class="network-stage" tabindex="-1" aria-label="Knowledge graph"><div class="grid-field" aria-hidden="true"></div><div class="network-context"><span>'+ (selected?'LOCAL GRAPH':'KNOWLEDGE GRAPH')+'</span><h1>'+esc(selected?selected.name.replace(/\.md$/,''):space.name)+'</h1><p id="graph-count">'+nodes.length+' nodes <span>·</span> '+links.length+' connections</p>'+(selected?'<div class="depth-control">'+networkButton('depth','1 hop','1','class="'+(network.depth===1?'active':'')+'"')+networkButton('depth','2 hops','2','class="'+(network.depth===2?'active':'')+'"')+networkButton('all','Clear focus')+'</div>':'')+'</div><svg class="knowledge-svg" aria-label="Notes, agents, and workflow relationships">'+orbDefinitions()+'<g class="network-world"><g class="network-edges">'+links.map(l=>{const a=network.positions.get(l.from),b=network.positions.get(l.to);return '<line class="knowledge-edge '+l.kind+'" data-source="'+esc(l.from)+'" data-target="'+esc(l.to)+'" x1="'+a[0]+'" y1="'+a[1]+'" x2="'+b[0]+'" y2="'+b[1]+'"/>'}).join('')+'</g><g class="network-nodes">'+nodes.map(n=>networkNode(n,links)).join('')+'</g></g></svg>'+
   (!nodes.length?'<div class="graph-empty"><h2>'+ (spaceNodes().length?'Nothing matches this view':'Your ideas start here')+'</h2><p>'+(spaceNodes().length?'Try another search or restore your filters.':'Drop your files into this space, write a note, or explore the example. Connections appear as you link real material.')+'</p>'+(spaceNodes().length?networkButton('reset','Reset filters'):studioButton('import','Import files')+studioButton('note','Write a note')+networkButton('example','Explore example'))+'</div>':'')+
   '<div class="edge-key" aria-label="Relationship legend"><span><i></i>Reference / wiki link</span><span><i></i>Context / assignment / model</span></div><div class="network-footer"><div class="type-filters" aria-label="Filter node types">'+['file','agent','task','model'].map(kind=>networkButton('type','<i class="type-dot '+kind+'"></i>'+({file:'Knowledge',agent:'Agents',task:'Workflow',model:'Models'}[kind]),kind,'aria-pressed="'+network.types.has(kind)+'"')).join('')+'</div><div class="graph-navigation">'+networkButton('zoom-out',lineIcon('minus'),'','aria-label="Zoom out"')+'<span id="network-zoom"></span>'+networkButton('zoom-in',lineIcon('plus'),'','aria-label="Zoom in"')+networkButton('fit',lineIcon('fit')+'<span>Center</span>','','title="Center visible nodes · F"')+
@@ -355,7 +361,13 @@ function highlightNetwork() {
 async function openNetworkNode(id) {
   if(!await saveEditor())return;
   if(studio.connecting){await connectStudio(id);return}
-  studio.selected=new Set([id]);studio.inspector=true;network.settings=false;drawInspector();highlightNetwork();
+  studio.selected=new Set([id]);studio.inspector=true;network.settings=false;
+  for(const row of document.querySelectorAll('.knowledge-explorer [data-network="open"]')){
+    const current=row.dataset.key===id;
+    row.classList.toggle('selected',current);
+    if(current)row.setAttribute('aria-current','true');else row.removeAttribute('aria-current');
+  }
+  drawInspector();highlightNetwork();
 }
 function addNetworkInspectorTools() {
   const el=$('#space-inspector');if(!el||el.hidden)return;
@@ -376,7 +388,11 @@ centerPoint=function(){if(inNetwork())return [100+spaceNodes().length%4*310,130+
 studioCommand=async function(action,id) {
   if(inNetwork()) {
     if(action==='focus'){await openNetworkNode(id);return}
-    if(action==='search'||action==='library'){$('#knowledge-query').focus();return}
+    if(action==='search'||action==='library'){
+      if(appearance().explorerCollapsed && !await setExplorerCollapsed(false))return;
+      $('#knowledge-query')?.focus();
+      return;
+    }
     if(action==='fit'){fitNetwork();return}
     if(action==='switch-space'){network.focus=null;network.search='';network.positions.clear();network.signature='';network.needFit=true}
   }
@@ -432,9 +448,15 @@ document.addEventListener('click',e=>{
 });
 document.addEventListener('input',async e=>{
   if(e.target.id==='knowledge-query') {
-    const value=e.target.value;network.search=value;
+    const original=e.target,value=original.value;
+    const start=original.selectionStart,end=original.selectionEnd;
     if(studio.dirty&&!await saveEditor())return;
-    renderNetwork();const input=$('#knowledge-query');input.focus();
+    if(!original.isConnected||original.value!==value)return;
+    network.search=value;
+    render();
+    const input=$('#knowledge-query');
+    if(input){input.focus({preventScroll:true});input.setSelectionRange(start,end);}
+    return;
   }
   if(e.target.id==='graph-size'){network.nodeScale=Number(e.target.value);const {nodes,links}=networkData();$('.network-nodes').innerHTML=nodes.map(n=>networkNode(n,links)).join('');applyNetworkCamera();highlightNetwork();persistNetwork()}
   if(e.target.id==='graph-edges'){network.edgeOpacity=Number(e.target.value);applyNetworkCamera();persistNetwork()}

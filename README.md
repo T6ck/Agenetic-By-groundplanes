@@ -1,21 +1,27 @@
 # Agenetic by Groundplanes
 
-A local research workspace with connected notes, scoped agents, model management and first-run onboarding.
+A local research workspace for connecting source documents, notes, and model runs. Open a workspace in Graph or Canvas, attach sources to an agent, then review the resulting excerpts, drafts, and claims alongside their sources.
 
-## Download
+**Windows x64 beta** · [Download from Releases](https://github.com/T6ck/Agenetic-By-groundplanes/releases) · [Changelog](CHANGELOG.md) · [Report a bug](https://github.com/T6ck/Agenetic-By-groundplanes/issues/new/choose)
 
-Windows setup EXEs are produced by the **Windows installer** workflow and attached to this repository's Releases. Download the EXE, not the source ZIP. Test releases are explicitly marked **Pre-release** and unsigned. They bundle the app, Python companion and a pinned llama.cpp CPU runtime. No Node, Python or PowerShell installation is needed by users. GGUF model weights are downloaded or selected separately.
+## Install
 
-## Automatic builds and updates
+1. Open a beta release and download its `Agenetic-Setup-…-x64.exe` from **Assets**.
+2. Run Setup and follow the in-app onboarding. Start with the example workspace or create your own.
+3. Open **Models** to register a local GGUF or find one on Hugging Face. The Windows installer includes a CPU runner. Model weights are a separate download.
 
-Every push to main builds a Windows test installer, checks the companion startup and publishes a prerelease download. Actions can also be run with the GitHub Run workflow button.
+Each release says whether it supports automatic updates. An unsigned preview requires a manual install. Once you have a signed beta, Agenetic checks GitHub at startup and hourly, downloads the update in the background, and installs it when you close the app. Open **Navigate → Releases** to check the current status.
 
-Stable releases use a tag matching desktop/package.json, such as v0.2.2. The tag workflow requires repository Actions secrets CSC_LINK, CSC_KEY_PASSWORD, AGENETIC_SIGNER_THUMBPRINT and AGENETIC_UPDATE_SIGNING_KEY, and rejects missing signing credentials. Never put private keys in this repository. Signed builds check GitHub Releases for stable updates at launch and every six hours, download them, and install on normal app exit. Preview builds do not auto-update. Signing certificate rotation requires a planned transition. A freshly generated self-signed certificate on each ephemeral runner is not a persistent signing identity.
+## Working in Agenetic
 
-## Data and scope
+- Import notes and PDFs, link sources in Graph, and arrange steps in Canvas.
+- Run evidence-only searches over connected sources or draft with a local model. Review drafts and claims against the original material.
+- Export workflows or back up the local vault. Community posting is optional. Release checks, model downloads, community activity, and remote MCP tools use the network when applicable.
 
-Notes, imports, layouts and run history stay in local app storage. A local profile is not an encrypted login. Encrypted backup archives are separate from the unencrypted live vault. Uninstall preserves app data. Community opens separately in the browser and remains subject to the hosted site's access policy; this repository does not turn the private community into a public service.
+Agenetic is free for personal use. Commercial use requires a license from Groundplanes.
 
-The CPU runtime is checksum-pinned to the official llama.cpp release. Models may need many gigabytes of RAM and disk. GPU performance, installed-app onboarding, persistence, actual GGUF inference and signed update transitions still require Windows acceptance testing. Production payment licensing, vault synchronization and unrestricted autonomous agent tools are not advertised as delivered.
+## Project links
 
-Personal use is free. Commercial licensing details will be maintained by Groundplanes.
+- [Beta testing and release process](CONTRIBUTING.md)
+- [Private security reporting](SECURITY.md)
+- [Groundplanes](https://groundplanes.com) · [hello@groundplanes.com](mailto:hello@groundplanes.com) · [@GroundplanesCo](https://x.com/GroundplanesCo)

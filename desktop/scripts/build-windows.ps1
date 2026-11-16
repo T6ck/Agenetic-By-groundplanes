@@ -1,9 +1,9 @@
-param([switch]$Release, [switch]$SelfSigned, [string]$LlamaDirectory = "")
+param([switch]$Release, [switch]$SelfSigned, [ValidateSet("stable","beta")][string]$Channel = "stable", [string]$LlamaDirectory = "")
 $ErrorActionPreference = 'Stop'
 Set-Location (Join-Path $PSScriptRoot '..')
 if ($Release -and $SelfSigned) { throw 'Choose Release or SelfSigned, not both.' }
 function Check-Exit { if ($LASTEXITCODE -ne 0) { throw "Build command failed: $LASTEXITCODE" } }
-if ($Release -and (!$env:CSC_LINK -or !$env:CSC_KEY_PASSWORD -or !$env:AGENETIC_UPDATE_SIGNING_KEY -or !$env:AGENETIC_SIGNER_THUMBPRINT)) { throw 'Signed release requires CSC_LINK, CSC_KEY_PASSWORD , AGENETIC_UPDATE_SIGNING_KEY and AGENETIC_SIGNER_THUMBPRINT. Use a secret store, never commit keys.' }
+if ($Release -and (!$env:CSC_LINK -or !$env:CSC_KEY_PASSWORD -or !$env:AGENETIC_SIGNER_THUMBPRINT)) { throw 'Signed release requires CSC_LINK, CSC_KEY_PASSWORD and AGENETIC_SIGNER_THUMBPRINT. Use a secret store, never commit keys.' }
 $isSigned = $Release -or $SelfSigned
 if ($SelfSigned) {
  # Keep the private key in Windows CurrentUser\My. Never ship it with the installer.
@@ -34,7 +34,7 @@ if ($LlamaDirectory) {
  Copy-Item (Join-Path $LlamaDirectory '*') runtime -Recurse -Force
 }
 if ($Release -and $env:AGENETIC_SIGNER_THUMBPRINT -notmatch '^[a-fA-F0-9]{40}$') { throw 'Invalid signer certificate thumbprint.' }
-@{ signerThumbprints = @($env:AGENETIC_SIGNER_THUMBPRINT); signed = [bool]$isSigned; development = [bool]$SelfSigned; runtime = 'Python 3.12'; modelRuntimeBundled = [bool]$LlamaDirectory } | ConvertTo-Json | Set-Content runtime\release.json
+@{ signerThumbprints = @($env:AGENETIC_SIGNER_THUMBPRINT); signed = [bool]$isSigned; development = [bool]$SelfSigned; channel = $Channel; runtime = 'Python 3.12'; modelRuntimeBundled = [bool]$LlamaDirectory } | ConvertTo-Json | Set-Content runtime\release.json -Encoding utf8
 npm ci; Check-Exit
 npm run prepare:assets; Check-Exit
 npm test; Check-Exit
@@ -49,6 +49,6 @@ if ($SelfSigned) {
 } else { npm run dist:win; Check-Exit }
 if ($Release) {
  Get-ChildItem release\*.exe | ForEach-Object { $signature = Get-AuthenticodeSignature $_.FullName; if (($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Thumbprint -ne $env:AGENETIC_SIGNER_THUMBPRINT)) { throw 'Installer signature did not validate. Do not publish.' } }
- node scripts\sign-feed.mjs; Check-Exit
+ if ($env:AGENETIC_UPDATE_SIGNING_KEY) { node scripts\sign-feed.mjs; Check-Exit }
 }
 Write-Host 'Build completed. Test installation, model loading, backup restore and uninstall on a clean Windows machine before publication.'

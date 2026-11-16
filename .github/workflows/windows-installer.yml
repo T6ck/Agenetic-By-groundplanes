@@ -13,6 +13,9 @@ jobs:
   build:
     runs-on: windows-latest
     timeout-minutes: 35
+    outputs:
+      kind: ${{ steps.release.outputs.kind }}
+      version: ${{ steps.release.outputs.version }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -22,7 +25,10 @@ jobs:
         with:
           python-version: '3.12'
       - name: Check application tests
-        run: node --test tests/*.test.mjs
+        run: |
+          node --test tests/*.test.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm test --prefix desktop
       - name: Download pinned llama.cpp CPU runtime
         shell: pwsh
         run: |
@@ -35,22 +41,47 @@ jobs:
           "LLAMA_DIRECTORY=$($cli.Directory.FullName)" >> $env:GITHUB_ENV
           & $cli.FullName --version
           if ($LASTEXITCODE -ne 0) { throw 'Bundled runtime failed to start' }
-      - name: Build compressed setup EXE
+      - name: Build Windows installer
+        id: release
         shell: pwsh
         env:
-          RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/v') }}
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
           AGENETIC_SIGNER_THUMBPRINT: ${{ secrets.AGENETIC_SIGNER_THUMBPRINT }}
           AGENETIC_UPDATE_SIGNING_KEY: ${{ secrets.AGENETIC_UPDATE_SIGNING_KEY }}
         run: |
-          if ($env:RELEASE_TAG -eq 'true') {
-            $version = (Get-Content desktop/package.json -Raw | ConvertFrom-Json).version
-            if ($env:GITHUB_REF_NAME -ne "v$version") { throw 'Tag must match desktop package version' }
-            ./desktop/scripts/build-windows.ps1 -Release -LlamaDirectory $env:LLAMA_DIRECTORY
-          } else {
-            ./desktop/scripts/build-windows.ps1 -LlamaDirectory $env:LLAMA_DIRECTORY
+          $ErrorActionPreference = 'Stop'
+          $version = (Get-Content desktop/package.json -Raw | ConvertFrom-Json).version
+          if ($version -notmatch '^\d+\.\d+\.\d+$') { throw 'desktop/package.json must have a stable base version.' }
+          $kind = 'preview'
+          if ($env:GITHUB_REF_TYPE -eq 'tag') {
+            if ($env:GITHUB_REF_NAME -ne "v$version") { throw 'Tag must match desktop package version.' }
+            $kind = 'stable'
+          } elseif ($env:GITHUB_REF -eq 'refs/heads/main' -and $env:CSC_LINK -and $env:CSC_KEY_PASSWORD -and $env:AGENETIC_SIGNER_THUMBPRINT) {
+            $kind = 'beta'
+            $version = "$version-beta.$env:GITHUB_RUN_NUMBER"
+            Push-Location desktop
+            try {
+              npm version $version --no-git-tag-version
+              if ($LASTEXITCODE -ne 0) { throw 'Could not set beta app version.' }
+              node -e "const fs = require('node:fs');const p = require('./package.json');Object.assign(p.build.publish[0],{channel:'beta',releaseType:'prerelease'});fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n');"
+              if ($LASTEXITCODE -ne 0) { throw 'Could not configure the beta update feed.' }
+            } finally { Pop-Location }
           }
+          if ($kind -eq 'preview' -and !$env:CSC_LINK) {
+            Write-Host 'No signing identity configured. Building a manual-install preview.'
+          }
+          if ($kind -eq 'preview') {
+            ./desktop/scripts/build-windows.ps1 -LlamaDirectory $env:LLAMA_DIRECTORY
+          } else {
+            ./desktop/scripts/build-windows.ps1 -Release -Channel $kind -LlamaDirectory $env:LLAMA_DIRECTORY
+            $manifest = if ($kind -eq 'beta') { 'beta.yml' } else { 'latest.yml' }
+            if (!(Test-Path "desktop/release/$manifest")) { throw "Signed installer is missing $manifest." }
+            $escaped = [regex]::Escape($version)
+            if ((Get-Content "desktop/release/$manifest" -Raw) -notmatch "(?m)^version:\s+$escaped\s*$") { throw 'Update manifest version does not match the installer.' }
+          }
+          "kind=$kind" >> $env:GITHUB_OUTPUT
+          "version=$version" >> $env:GITHUB_OUTPUT
       - name: Verify GGUF registration and inference with the packaged Windows runtime
         shell: pwsh
         run: |
@@ -79,24 +110,77 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: Agenetic-Windows-installer
           path: release
-      - name: Publish download
+      - name: Publish download and patch notes
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           COMMIT_SHA: ${{ github.sha }}
-          REF_NAME: ${{ github.ref_name }}
-          RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/v') }}
+          RELEASE_KIND: ${{ needs.build.outputs.kind }}
+          VERSION: ${{ needs.build.outputs.version }}
         shell: bash
         run: |
           set -euo pipefail
-          if [ "$RELEASE_TAG" = true ]; then
-            gh release create "$REF_NAME" --target "$COMMIT_SHA" --title "Agenetic $REF_NAME" --notes "Signed Windows installer. Includes local companion, CPU inference runtime and onboarding." release/*
-          else
-            # Preview is deliberately excluded from the stable automatic-update feed.
-            tag="preview-${GITHUB_RUN_NUMBER}"
-            gh release create "$tag" --target "$COMMIT_SHA" --prerelease --title "Agenetic Windows test build ${GITHUB_RUN_NUMBER}" --notes "Unsigned test installer. Includes app, local companion and CPU runtime. No developer tools required. Automatic updates are disabled in this preview. Windows may display an unrecognized-publisher warning. Installation, persistence and model performance still need user testing." release/*.exe release/SHA256SUMS.txt
+          installer="release/Agenetic-Setup-${VERSION}-x64.exe"
+          test -s "$installer"
+          test -s release/SHA256SUMS.txt
+          (cd release && tr -d '\r' < SHA256SUMS.txt | sha256sum -c -)
+          args=(--verify-tag)
+          case "$RELEASE_KIND" in
+            stable) tag="v$VERSION"; title="Agenetic $VERSION"; args+=(--latest);;
+            beta) tag="v$VERSION"; title="Agenetic $VERSION"; args+=(--prerelease);;
+            preview) tag="preview-$GITHUB_RUN_NUMBER"; title="Agenetic $VERSION · beta preview"; args=(--prerelease);;
+            *) exit 1;;
+          esac
+          if test "$RELEASE_KIND" = beta; then
+            latest_run=$(gh release list --limit 100 --json tagName,isDraft --jq '.[] | select(.isDraft == false) | .tagName' |
+              sed -nE 's/^v[0-9]+\.[0-9]+\.[0-9]+-beta\.([0-9]+)$/\1/p' | sort -nr | sed -n '1p')
+            if test -n "$latest_run" && test "$latest_run" -gt "$GITHUB_RUN_NUMBER"; then
+              echo 'A newer beta build has already been published.'
+              exit 0
+            fi
+            # A release created with GITHUB_TOKEN doesn't trigger another workflow.
+            remote_sha=$(git ls-remote --tags origin "refs/tags/$tag" | cut -f1)
+            if test -n "$remote_sha"; then
+              test "$remote_sha" = "$COMMIT_SHA"
+            else
+              git tag "$tag" "$COMMIT_SHA"
+              git push origin "refs/tags/$tag"
+            fi
           fi
+          if gh release view "$tag" --json isDraft --jq '.isDraft' >/tmp/agenetic-draft; then
+            if test "$(cat /tmp/agenetic-draft)" = false; then
+              echo 'This release has already been published.'
+              exit 0
+            fi
+            echo 'An unpublished draft for this tag exists. Resolve it before retrying.'
+            exit 1
+          fi
+          notes=$(mktemp)
+          {
+            printf '## Changes\n\n'
+            base_version="${VERSION%%-beta.*}"
+            awk -v heading="## $base_version" '$0 == heading {show=1; next} /^## / {show=0} show' CHANGELOG.md
+            printf '\n## Install and update\n\n'
+            if test "$RELEASE_KIND" = preview; then
+              printf 'Download the Windows x64 setup EXE below. This preview is unsigned and updates are installed manually.\n'
+            else
+              printf 'Download the Windows x64 setup EXE for a first install or to move from an unsigned preview. Signed builds on this channel check GitHub for updates and install them when Agenetic closes.\n'
+            fi
+            printf '\n[Report a beta issue](https://github.com/%s/issues/new/choose) · [Full changelog](https://github.com/%s/blob/main/CHANGELOG.md)\n' "$GH_REPO" "$GH_REPO"
+            printf '\nSource commit: [`%s`](https://github.com/%s/commit/%s)\n' "${COMMIT_SHA:0:7}" "$GH_REPO" "$COMMIT_SHA"
+          } > "$notes"
+          assets=("$installer" release/SHA256SUMS.txt)
+          if test "$RELEASE_KIND" != preview; then
+            manifest=latest.yml
+            if test "$RELEASE_KIND" = beta; then manifest=beta.yml; fi
+            test -s "release/$manifest"
+            assets+=("release/$manifest")
+            if test -f "$installer.blockmap"; then assets+=("$installer.blockmap"); fi
+            if test -f release/signed-manifest.json; then assets+=(release/signed-manifest.json); fi
+          fi
+          gh release create "$tag" --target "$COMMIT_SHA" --title "$title" --notes-file "$notes" "${args[@]}" "${assets[@]}"

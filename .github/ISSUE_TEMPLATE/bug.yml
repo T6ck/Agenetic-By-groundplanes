@@ -1,0 +1,27 @@
+name: Beta bug
+description: Report a problem with the Agenetic desktop beta
+body:
+  - type: markdown
+    attributes:
+      value: Keep private research, personal paths, and credentials out of public reports. For vulnerabilities, contact hello@groundplanes.com.
+  - type: input
+    id: version
+    attributes:
+      label: Agenetic version and Windows version
+      description: Find the app version under Navigate → Releases.
+      placeholder: 0.2.15 on Windows 11 24H2
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: In Graph, select a note, edit its title, and press Ctrl+K.
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: What happened and what did you expect?
+    validations:
+      required: true

@@ -16,8 +16,9 @@ jobs:
       - name: Create a disposable Windows executable
         shell: pwsh
         run: |
-          'class Probe { static void Main() {} }' | Set-Content "$env:RUNNER_TEMP/probe.cs"
-          & "$env:WINDIR/Microsoft.NET/Framework64/v4.0.30319/csc.exe" /nologo "/out:$env:RUNNER_TEMP/probe.exe" "$env:RUNNER_TEMP/probe.cs"
+          Push-Location $env:RUNNER_TEMP
+          'class Probe { static void Main() {} }' | Set-Content probe.cs
+          & "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe" /nologo /out:probe.exe probe.cs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Authenticate to Azure
         uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906

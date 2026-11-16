@@ -2,6 +2,9 @@ name: Windows installer
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - '.github/workflows/verify-azure-signing.yml'
+      - '.github/workflows/windows-installer.yml'
     tags: ['v*']
   workflow_dispatch:
 concurrency:

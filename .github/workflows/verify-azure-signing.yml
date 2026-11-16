@@ -1,0 +1,47 @@
+name: Verify Azure signing
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/verify-azure-signing.yml']
+  workflow_dispatch:
+permissions: {}
+jobs:
+  verify:
+    if: github.ref == 'refs/heads/main'
+    runs-on: windows-latest
+    timeout-minutes: 10
+    permissions:
+      id-token: write
+    steps:
+      - name: Create a disposable Windows executable
+        shell: pwsh
+        run: |
+          'class Probe { static void Main() {} }' | Set-Content "$env:RUNNER_TEMP/probe.cs"
+          & "$env:WINDIR/Microsoft.NET/Framework64/v4.0.30319/csc.exe" /nologo "/out:$env:RUNNER_TEMP/probe.exe" "$env:RUNNER_TEMP/probe.cs"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Authenticate to Azure
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906
+        with:
+          client-id: 37629a79-e7bd-4291-bfff-33f14b298ac9
+          tenant-id: b35ef5fc-5945-48d2-aca7-74e9e1e7359a
+          allow-no-subscriptions: true
+      - name: Sign the disposable executable
+        uses: azure/artifact-signing-action@c7ab2a863ab5f9a846ddb8265964877ef296ee82
+        with:
+          endpoint: https://eus.codesigning.azure.net/
+          signing-account-name: Groundplanes
+          certificate-profile-name: agenetic-release
+          files: ${{ runner.temp }}\probe.exe
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+      - name: Verify Windows trust and inspect profile identifiers
+        shell: pwsh
+        run: |
+          $signature = Get-AuthenticodeSignature -LiteralPath "$env:RUNNER_TEMP/probe.exe"
+          if ($signature.Status -ne 'Valid' -or !$signature.TimeStamperCertificate) {
+            throw "Expected a valid timestamped Windows signature. Status: $($signature.Status)"
+          }
+          $signature.SignerCertificate.Extensions |
+            Where-Object { $_.Oid.Value -eq '2.5.29.37' } |
+            ForEach-Object { $_.EnhancedKeyUsages | ForEach-Object { Write-Host $_.Value } }

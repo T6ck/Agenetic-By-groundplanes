@@ -6,7 +6,7 @@ function verifyInstaller(file,thumbprints,run=execFile,profileEku=''){
   if(!azureProfile&&!pins.length)return resolve('No trusted release signer configured.');
   const script = [
    '$s=Get-AuthenticodeSignature -LiteralPath $env:AGENETIC_VERIFY_FILE',
-   '$eku=@($s.SignerCertificate.Extensions | Where-Object {$_.Oid.Value -eq "2.5.29.37"} | ForEach-Object {$_.EnhancedKeyUsages} | ForEach-Object {$_.Value})',
+   '$eku=@($s.SignerCertificate.Extensions | Where-Object {$_.Oid.Value -eq "2.5.29.37"} | ForEach-Object {([System.Security.Cryptography.X509Certificates.X509EnhancedKeyUsageExtension]::new($_, $_.Critical)).EnhancedKeyUsages} | ForEach-Object {$_.Value})',
    '@{status=[string]$s.Status; thumbprint=[string]$s.SignerCertificate.Thumbprint; eku=$eku; timestamped=[bool]$s.TimeStamperCertificate}|ConvertTo-Json -Compress'
   ].join('; ');
   run('powershell.exe',['-NoProfile','-NonInteractive','-Command',script],{windowsHide:true,timeout:30000,env:{...process.env,AGENETIC_VERIFY_FILE:file}},(error,stdout)=>{
@@ -16,7 +16,9 @@ function verifyInstaller(file,thumbprints,run=execFile,profileEku=''){
     const matchesSigner = azureProfile
       ? signature.timestamped === true && Array.isArray(signature.eku) && signature.eku.includes(profileEku)
       : !profileEku && pins.includes(String(signature.thumbprint).toUpperCase());
-    resolve(signature.status === 'Valid' && matchesSigner ? null : 'Installer signer is invalid or untrusted.');
+    if (signature.status !== 'Valid') return resolve('Windows signature status: ' + signature.status);
+    if (azureProfile && !signature.timestamped) return resolve('Installer signature has no trusted timestamp.');
+    resolve(matchesSigner ? null : 'Installer signature is from an unexpected signing profile or certificate.');
    } catch { resolve('Invalid signature verification response.'); }
   });
  });

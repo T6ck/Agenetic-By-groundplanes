@@ -49,7 +49,7 @@ if ($SelfSigned) {
  }
  Write-Host 'Self-signed test build only. Windows trust is not installed or bypassed. Automatic updates are disabled for development builds.'
 } elseif ($AzureSigning) {
- npx --no-install electron-builder --win nsis --x64 --publish never '--config.forceCodeSigning=true' '--config.win.azureSignOptions.endpoint=https://eus.codesigning.azure.net/' '--config.win.azureSignOptions.codeSigningAccountName=Groundplanes' '--config.win.azureSignOptions.certificateProfileName=agenetic-release' '--config.win.azureSignOptions.publisherName=David Tackett' '--config.win.azureSignOptions.timestampRfc3161=http://timestamp.acs.microsoft.com'; Check-Exit
+ npx --no-install electron-builder --win nsis --x64 --publish never '--config.forceCodeSigning=true' '--config.win.azureSignOptions.endpoint=https://eus.codesigning.azure.net/' '--config.win.azureSignOptions.codeSigningAccountName=Groundplanes' '--config.win.azureSignOptions.certificateProfileName=agenetic-release' '--config.win.azureSignOptions.publisherName=David Tackett' '--config.win.azureSignOptions.timestampRfc3161=http://timestamp.acs.microsoft.com' '--config.win.azureSignOptions.timestampDigest=SHA256' '--config.win.azureSignOptions.fileDigest=SHA256'; Check-Exit
 } else { npm run dist:win; Check-Exit }
 if ($Release) {
  node scripts/verify-release.cjs; Check-Exit

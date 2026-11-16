@@ -12,7 +12,12 @@ function verifyInstaller(file,thumbprints,run=execFile,profileEku=''){
    '$eku=@($s.SignerCertificate.Extensions | Where-Object {$_.Oid.Value -eq "2.5.29.37"} | ForEach-Object {([System.Security.Cryptography.X509Certificates.X509EnhancedKeyUsageExtension]::new($_, $_.Critical)).EnhancedKeyUsages} | ForEach-Object {$_.Value})',
    '@{status=[string]$s.Status; thumbprint=[string]$s.SignerCertificate.Thumbprint; eku=$eku; timestamped=[bool]$s.TimeStamperCertificate}|ConvertTo-Json -Compress'
   ].join('; ');
-  run('powershell.exe',['-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(script,'utf16le').toString('base64')],{windowsHide:true,timeout:30000,env:{...process.env,AGENETIC_VERIFY_FILE:absolutePath(file)}},(error,stdout)=>{
+  // Windows PowerShell must resolve its own built-in modules, including on a PowerShell 7 host.
+  const env = {...process.env, AGENETIC_VERIFY_FILE:absolutePath(file)};
+  for (const key of Object.keys(env)) {
+   if (key.toLowerCase() === 'psmodulepath') delete env[key];
+  }
+  run('powershell.exe',['-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(script,'utf16le').toString('base64')],{windowsHide:true,timeout:30000,env},(error,stdout)=>{
    if(error)return resolve('Windows could not read the installer signature.');
    try {
     const signature = JSON.parse(stdout);

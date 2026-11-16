@@ -201,3 +201,19 @@ jobs:
             if test -f release/signed-manifest.json; then assets+=(release/signed-manifest.json); fi
           fi
           gh release create "$tag" --target "$COMMIT_SHA" --title "$title" --notes-file "$notes" "${args[@]}" "${assets[@]}"
+  verify-beta-update:
+    needs: [build, publish]
+    if: needs.build.outputs.kind == 'beta'
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install the previous beta and verify automatic update
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: node desktop/scripts/check-beta-update.mjs

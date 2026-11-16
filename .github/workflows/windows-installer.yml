@@ -4,12 +4,11 @@ on:
     branches: [main]
     paths-ignore:
       - '.github/workflows/verify-azure-signing.yml'
-      - '.github/workflows/windows-installer.yml'
     tags: ['v*']
   workflow_dispatch:
 concurrency:
   group: windows-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
@@ -93,9 +92,10 @@ jobs:
               ./desktop/scripts/build-windows.ps1 -Release -Channel stable -LlamaDirectory $env:LLAMA_DIRECTORY
             }
             $manifest = if ($kind -eq 'beta') { 'beta.yml' } else { 'latest.yml' }
-            if (!(Test-Path "desktop/release/$manifest")) { throw "Signed installer is missing $manifest." }
+            $manifestPath = Join-Path $env:GITHUB_WORKSPACE "desktop/release/$manifest"
+            if (!(Test-Path $manifestPath)) { throw "Signed installer is missing $manifest." }
             $escaped = [regex]::Escape($version)
-            if ((Get-Content "desktop/release/$manifest" -Raw) -notmatch "(?m)^version:\s+$escaped\s*$") { throw 'Update manifest version does not match the installer.' }
+            if ((Get-Content $manifestPath -Raw) -notmatch "(?m)^version:\s+$escaped\s*$") { throw 'Update manifest version does not match the installer.' }
           }
           "kind=$kind" >> $env:GITHUB_OUTPUT
           "version=$version" >> $env:GITHUB_OUTPUT

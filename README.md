@@ -10,7 +10,9 @@ A local research workspace for connecting source documents, notes, and model run
 2. Run Setup and follow the in-app onboarding. Start with the example workspace or create your own.
 3. Open **Models** to register a local GGUF or find one on Hugging Face. The Windows installer includes a CPU runner. Model weights are a separate download.
 
-Each release says whether it supports automatic updates. An unsigned preview requires a manual install. Once you have a signed beta, Agenetic checks GitHub at startup and hourly, downloads the update in the background, and installs it when you close the app. Open **Navigate → Releases** to check the current status.
+If you installed an unsigned preview, run the signed Windows installer once to join the beta update channel.
+
+Agenetic checks GitHub at startup and hourly, downloads updates in the background, and installs them when you close the app. Open **Navigate → Releases → Check for updates** to see your version and update status.
 
 ## Working in Agenetic
 

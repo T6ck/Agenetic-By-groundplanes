@@ -1,9 +1,10 @@
-param([switch]$Release, [switch]$SelfSigned, [ValidateSet("stable","beta")][string]$Channel = "stable", [string]$LlamaDirectory = "")
+param([switch]$Release, [switch]$AzureSigning, [switch]$SelfSigned, [ValidateSet("stable","beta")][string]$Channel = "stable", [string]$LlamaDirectory = "")
 $ErrorActionPreference = 'Stop'
 Set-Location (Join-Path $PSScriptRoot '..')
 if ($Release -and $SelfSigned) { throw 'Choose Release or SelfSigned, not both.' }
 function Check-Exit { if ($LASTEXITCODE -ne 0) { throw "Build command failed: $LASTEXITCODE" } }
-if ($Release -and (!$env:CSC_LINK -or !$env:CSC_KEY_PASSWORD -or !$env:AGENETIC_SIGNER_THUMBPRINT)) { throw 'Signed release requires CSC_LINK, CSC_KEY_PASSWORD and AGENETIC_SIGNER_THUMBPRINT. Use a secret store, never commit keys.' }
+if ($AzureSigning -and !$Release) { throw 'Azure signing requires -Release.' }
+if ($Release -and !$AzureSigning -and (!$env:CSC_LINK -or !$env:CSC_KEY_PASSWORD -or !$env:AGENETIC_SIGNER_THUMBPRINT)) { throw 'Signed release requires CSC_LINK, CSC_KEY_PASSWORD and AGENETIC_SIGNER_THUMBPRINT. Use a secret store, never commit keys.' }
 $isSigned = $Release -or $SelfSigned
 if ($SelfSigned) {
  # Keep the private key in Windows CurrentUser\My. Never ship it with the installer.
@@ -33,8 +34,9 @@ if ($LlamaDirectory) {
  if (!(Test-Path (Join-Path $LlamaDirectory 'llama-cli.exe'))) { throw 'Choose an official llama.cpp Windows distribution containing llama-cli.exe.' }
  Copy-Item (Join-Path $LlamaDirectory '*') runtime -Recurse -Force
 }
-if ($Release -and $env:AGENETIC_SIGNER_THUMBPRINT -notmatch '^[a-fA-F0-9]{40}$') { throw 'Invalid signer certificate thumbprint.' }
-@{ signerThumbprints = @($env:AGENETIC_SIGNER_THUMBPRINT); signed = [bool]$isSigned; development = [bool]$SelfSigned; channel = $Channel; runtime = 'Python 3.12'; modelRuntimeBundled = [bool]$LlamaDirectory } | ConvertTo-Json | Set-Content runtime\release.json -Encoding utf8
+if ($Release -and !$AzureSigning -and $env:AGENETIC_SIGNER_THUMBPRINT -notmatch '^[a-fA-F0-9]{40}$') { throw 'Invalid signer certificate thumbprint.' }
+$profileEku = if ($AzureSigning) { '1.3.6.1.4.1.311.97.195110185.989389674.218214560.908509447' } else { '' }
+@{ signingProfileEku = $profileEku; signerThumbprints = @($env:AGENETIC_SIGNER_THUMBPRINT); signed = [bool]$isSigned; development = [bool]$SelfSigned; channel = $Channel; runtime = 'Python 3.12'; modelRuntimeBundled = [bool]$LlamaDirectory } | ConvertTo-Json | Set-Content runtime\release.json -Encoding utf8
 npm ci; Check-Exit
 npm run prepare:assets; Check-Exit
 npm test; Check-Exit
@@ -46,9 +48,11 @@ if ($SelfSigned) {
   if ($signature.SignerCertificate.Thumbprint -ne $testCert.Thumbprint -or $signature.Status -notin @('Valid','NotTrusted')) { throw "Development signature verification failed. File: $($_.Name); status: $($signature.Status); reason: $($signature.StatusMessage); signer: $($signature.SignerCertificate.Thumbprint). Do not distribute until investigated." }
  }
  Write-Host 'Self-signed test build only. Windows trust is not installed or bypassed. Automatic updates are disabled for development builds.'
+} elseif ($AzureSigning) {
+ npx --no-install electron-builder --win nsis --x64 --publish never '--config.forceCodeSigning=true' '--config.win.azureSignOptions.endpoint=https://eus.codesigning.azure.net/' '--config.win.azureSignOptions.codeSigningAccountName=Groundplanes' '--config.win.azureSignOptions.certificateProfileName=agenetic-release' '--config.win.azureSignOptions.publisherName=David Tackett' '--config.win.azureSignOptions.timestampRfc3161=http://timestamp.acs.microsoft.com'; Check-Exit
 } else { npm run dist:win; Check-Exit }
 if ($Release) {
- Get-ChildItem release\*.exe | ForEach-Object { $signature = Get-AuthenticodeSignature $_.FullName; if (($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Thumbprint -ne $env:AGENETIC_SIGNER_THUMBPRINT)) { throw 'Installer signature did not validate. Do not publish.' } }
+ node scripts/verify-release.cjs; Check-Exit
  if ($env:AGENETIC_UPDATE_SIGNING_KEY) { node scripts\sign-feed.mjs; Check-Exit }
 }
 Write-Host 'Build completed. Test installation, model loading, backup restore and uninstall on a clean Windows machine before publication.'

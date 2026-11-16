@@ -2,6 +2,11 @@
 
 For installers, checksums, and notes by build, see [GitHub Releases](https://github.com/T6ck/Agenetic-By-groundplanes/releases).
 
+## 0.2.17
+
+- Sign Windows beta installers with Azure Artifact Signing. Install this build once to move from the unsigned preview onto the automatic update channel.
+- Verify Windows trust and the exact signing profile before accepting beta updates.
+
 ## 0.2.16
 
 - Show the installed version, release channel, and update status together when you select **Check for updates**.

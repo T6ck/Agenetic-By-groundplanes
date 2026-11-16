@@ -12,8 +12,6 @@ Use Node 24. Run `node --test tests/*.test.mjs` from the repository root and `np
 
 ## Publish Windows builds
 
-Pushes to `main` build a beta installer. Configure `CSC_LINK`, `CSC_KEY_PASSWORD`, and `AGENETIC_SIGNER_THUMBPRINT` in [GitHub Actions secrets](https://github.com/T6ck/Agenetic-By-groundplanes/settings/secrets/actions) to enable signed beta releases. Use an Authenticode identity trusted by Windows and keep the private key in the secret store. Agenetic verifies the Windows signature and its pinned signer before applying updates.
+Pushes to `main` build and publish a timestamped, Azure-signed Windows beta through GitHub OIDC. The build verifies the installer and app executable before uploading the beta channel metadata. The updater checks the exact Azure certificate profile across normal certificate rotations. Keep the certificate profile when renewing the signing identity.
 
-With signing configured, CI publishes a prerelease tagged `v<base-version>-beta.<run-number>` with the installer, checksums, and beta update metadata. Without signing configured, CI publishes a manual-install preview. The first move from an unsigned preview to the signed channel requires downloading the signed installer once.
-
-For stable releases, bump both desktop package versions, record changes in the changelog, and push a matching `vX.Y.Z` tag. Stable releases require signing. Signed stable installs check the stable feed. Before distributing the signed beta, test an actual update between two signed versions on Windows with a populated vault.
+The first move from an unsigned preview to the signed channel requires installing the signed beta once. For stable releases, bump both desktop package versions, document the changes, and push a matching `vX.Y.Z` tag. Stable tag builds use the separate `CSC_LINK`, `CSC_KEY_PASSWORD`, and `AGENETIC_SIGNER_THUMBPRINT` Actions secrets and publish to the stable feed.

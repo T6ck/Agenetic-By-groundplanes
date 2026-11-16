@@ -21,3 +21,15 @@ test('development signing does not activate automatic updates',async()=>{
  const controls=configureUpdates(updater,{signed:true,development:true,channel:'beta',signerThumbprints:[pin]},{packaged:true,platform:'win32'});
  assert.match((await controls.check()).message,/require a signed Windows release/);
 });
+
+test('Azure updater trusts the exact timestamped profile across leaf certificate rotation', async () => {
+ const profile = '1.3.6.1.4.1.311.97.11.22.33.44';
+ const verify = signature => verifyInstaller('file', [pin],
+   (_command, _args, _options, callback) => callback(null, JSON.stringify(signature)), profile);
+ const valid = {status:'Valid', timestamped:true, eku:[profile]};
+ assert.equal(await verify({...valid, thumbprint:pin}), null);
+ assert.equal(await verify({...valid, thumbprint:'B'.repeat(40)}), null);
+ assert.ok(await verify({...valid, eku:[profile + '0'], thumbprint:pin}));
+ assert.ok(await verify({...valid, timestamped:false}));
+ assert.ok(await verify({...valid, status:'NotTrusted'}));
+});

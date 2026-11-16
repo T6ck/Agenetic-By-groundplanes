@@ -14,6 +14,9 @@ permissions:
   contents: read
 jobs:
   build:
+    permissions:
+      contents: read
+      id-token: write
     runs-on: windows-latest
     timeout-minutes: 35
     outputs:
@@ -44,6 +47,13 @@ jobs:
           "LLAMA_DIRECTORY=$($cli.Directory.FullName)" >> $env:GITHUB_ENV
           & $cli.FullName --version
           if ($LASTEXITCODE -ne 0) { throw 'Bundled runtime failed to start' }
+      - name: Authenticate to Azure for beta signing
+        if: github.ref == 'refs/heads/main'
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906
+        with:
+          client-id: 37629a79-e7bd-4291-bfff-33f14b298ac9
+          tenant-id: b35ef5fc-5945-48d2-aca7-74e9e1e7359a
+          allow-no-subscriptions: true
       - name: Build Windows installer
         id: release
         shell: pwsh
@@ -60,7 +70,7 @@ jobs:
           if ($env:GITHUB_REF_TYPE -eq 'tag') {
             if ($env:GITHUB_REF_NAME -ne "v$version") { throw 'Tag must match desktop package version.' }
             $kind = 'stable'
-          } elseif ($env:GITHUB_REF -eq 'refs/heads/main' -and $env:CSC_LINK -and $env:CSC_KEY_PASSWORD -and $env:AGENETIC_SIGNER_THUMBPRINT) {
+          } elseif ($env:GITHUB_REF -eq 'refs/heads/main') {
             $kind = 'beta'
             $version = "$version-beta.$env:GITHUB_RUN_NUMBER"
             Push-Location desktop
@@ -77,7 +87,11 @@ jobs:
           if ($kind -eq 'preview') {
             ./desktop/scripts/build-windows.ps1 -LlamaDirectory $env:LLAMA_DIRECTORY
           } else {
-            ./desktop/scripts/build-windows.ps1 -Release -Channel $kind -LlamaDirectory $env:LLAMA_DIRECTORY
+            if ($kind -eq 'beta') {
+              ./desktop/scripts/build-windows.ps1 -Release -AzureSigning -Channel beta -LlamaDirectory $env:LLAMA_DIRECTORY
+            } else {
+              ./desktop/scripts/build-windows.ps1 -Release -Channel stable -LlamaDirectory $env:LLAMA_DIRECTORY
+            }
             $manifest = if ($kind -eq 'beta') { 'beta.yml' } else { 'latest.yml' }
             if (!(Test-Path "desktop/release/$manifest")) { throw "Signed installer is missing $manifest." }
             $escaped = [regex]::Escape($version)

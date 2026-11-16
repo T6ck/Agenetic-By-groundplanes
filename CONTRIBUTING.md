@@ -15,3 +15,5 @@ Use Node 24. Run `node --test tests/*.test.mjs` from the repository root and `np
 Pushes to `main` build and publish a timestamped, Azure-signed Windows beta through GitHub OIDC. The build verifies the installer and app executable before uploading the beta channel metadata. The updater checks the exact Azure certificate profile across normal certificate rotations. Keep the certificate profile when renewing the signing identity.
 
 The first move from an unsigned preview to the signed channel requires installing the signed beta once. For stable releases, bump both desktop package versions, document the changes, and push a matching `vX.Y.Z` tag. Stable tag builds use the separate `CSC_LINK`, `CSC_KEY_PASSWORD`, and `AGENETIC_SIGNER_THUMBPRINT` Actions secrets and publish to the stable feed.
+
+When an earlier signed beta is available, the Windows workflow installs it on a clean runner, checks for the new public beta through the app, closes the app to apply it, and verifies the version after relaunch.

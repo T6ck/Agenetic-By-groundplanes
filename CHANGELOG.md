@@ -2,6 +2,10 @@
 
 For installers, checksums, and notes by build, see [GitHub Releases](https://github.com/T6ck/Agenetic-By-groundplanes/releases).
 
+## 0.2.16
+
+- Show the installed version, release channel, and update status together when you select **Check for updates**.
+
 ## 0.2.15
 
 ### Fixed from beta feedback
@@ -11,5 +15,5 @@ For installers, checksums, and notes by build, see [GitHub Releases](https://git
 
 ### Release and updates
 
-- Added a Releases entry in the app with the installed version, update status, and links to patch notes and bug reporting.
+- Added a Releases entry in the app with an update check and links to patch notes and bug reporting.
 - Added a signed beta release channel for pushes to `main`. Signed stable installers use a separate feed. Unsigned previews still install manually.

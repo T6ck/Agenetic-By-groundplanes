@@ -7,6 +7,15 @@ if(window.ageneticDesktop){
   if(appearanceOpen)$('#content').insertAdjacentHTML('beforeend',appearancePanel());
  };
  loadCommunity=async function(){};
- document.addEventListener('click',e=>{if(e.target.closest('[data-desktop-community]'))window.ageneticDesktop.openCommunity();if(e.target.closest('[data-desktop-website]'))window.ageneticDesktop.openWebsite();if(e.target.closest('[data-desktop-update]'))window.ageneticDesktop.checkUpdate().then(r=>toast(r.message))});
+ document.addEventListener('click',e=>{if(e.target.closest('[data-desktop-community]'))window.ageneticDesktop.openCommunity();if(e.target.closest('[data-desktop-website]'))window.ageneticDesktop.openWebsite();const update=e.target.closest('[data-desktop-update]');
+  if(!update||update.disabled)return;
+  const status=document.querySelector('#release-status');
+  const showStatus=message=>{if(status)status.textContent=message;else toast(message)};
+  update.disabled=true;
+  if(status)status.textContent='Checking update status…';
+  window.ageneticDesktop.checkUpdate()
+   .then(result=>showStatus('Agenetic '+result.version+' · '+result.channel+'. '+result.message))
+   .catch(()=>showStatus('Update status is unavailable.'))
+   .finally(()=>{update.disabled=false});});
 }
 let desktopConnectionStatus='';

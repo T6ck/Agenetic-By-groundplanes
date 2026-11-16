@@ -2,7 +2,7 @@
 
 ## Report a beta issue
 
-Use the [beta bug form](https://github.com/T6ck/Agenetic-By-groundplanes/issues/new/choose). Include the version from **Navigate → Releases**, Windows version, steps, and what happened. A minimal sample workspace helps with Graph and research bugs. Remove research materials, local file paths, and credentials before sharing screenshots or logs. Send private details to [hello@groundplanes.com](mailto:hello@groundplanes.com).
+Use the [beta bug form](https://github.com/T6ck/Agenetic-By-groundplanes/issues/new/choose). Include the version from **Navigate → Releases → Check for updates**, Windows version, steps, and what happened. A minimal sample workspace helps with Graph and research bugs. Remove research materials, local file paths, and credentials before sharing screenshots or logs. Send private details to [hello@groundplanes.com](mailto:hello@groundplanes.com).
 
 When opening a patch, add a changelog bullet describing the behavior users will see and link the public issue if there is one. GitHub Releases is the public record for each installer.
 

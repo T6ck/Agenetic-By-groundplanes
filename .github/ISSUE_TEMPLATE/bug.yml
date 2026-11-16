@@ -8,7 +8,7 @@ body:
     id: version
     attributes:
       label: Agenetic version and Windows version
-      description: Find the app version under Navigate → Releases.
+      description: Find the app version under Navigate → Releases → Check for updates.
       placeholder: 0.2.15 on Windows 11 24H2
     validations:
       required: true

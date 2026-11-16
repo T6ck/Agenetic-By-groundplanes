@@ -45,7 +45,7 @@ if ($SelfSigned) {
   $signature = Get-AuthenticodeSignature $_.FullName
   if ($signature.SignerCertificate.Thumbprint -ne $testCert.Thumbprint -or $signature.Status -notin @('Valid','NotTrusted')) { throw "Development signature verification failed. File: $($_.Name); status: $($signature.Status); reason: $($signature.StatusMessage); signer: $($signature.SignerCertificate.Thumbprint). Do not distribute until investigated." }
  }
- Write-Host 'Self-signed test build only. Windows trust is not installed or bypassed. Automatic updates require this certificate to be explicitly trusted on the test machine; the updater still requires a Valid signature.'
+ Write-Host 'Self-signed test build only. Windows trust is not installed or bypassed. Automatic updates are disabled for development builds.'
 } else { npm run dist:win; Check-Exit }
 if ($Release) {
  Get-ChildItem release\*.exe | ForEach-Object { $signature = Get-AuthenticodeSignature $_.FullName; if (($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Thumbprint -ne $env:AGENETIC_SIGNER_THUMBPRINT)) { throw 'Installer signature did not validate. Do not publish.' } }

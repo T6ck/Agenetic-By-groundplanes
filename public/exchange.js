@@ -20,7 +20,7 @@ function desktopStatus(){
   '<div class="actions"><a href="https://github.com/T6ck/Agenetic-By-groundplanes/releases" target="_blank" rel="noopener noreferrer">Downloads and release notes</a>'+
   '<a href="https://github.com/T6ck/Agenetic-By-groundplanes/issues/new/choose" target="_blank" rel="noopener noreferrer">Report a beta issue</a>'+
   (window.ageneticDesktop?'<button type="button" data-desktop-update>Check for updates</button>':'')+
-  '</div><p>Signed builds download updates and install when you close Agenetic. Unsigned previews use the installer from Releases.</p>'+
+  '</div>'+(window.ageneticDesktop?'<p id="release-status" role="status"></p>':'')+'<p>Signed builds download updates and install when you close Agenetic. Unsigned previews use the installer from Releases.</p>'+
   '<p>Need help? Email hello@groundplanes.com.</p></section>');
 }
 document.addEventListener('change',async e=>{if(e.target.id!=='exchange-file')return;const f=e.target.files[0];if(!f)return;if(f.size>4000000)return toast('Choose a JSON package under 4 MB.');try{packageDraft=await readPackage(await f.text());await previewPackage(packageDraft)}catch(err){report(err)}finally{e.target.value=''}});

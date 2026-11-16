@@ -12,7 +12,9 @@ jobs:
     timeout-minutes: 10
     permissions:
       id-token: write
+      contents: read
     steps:
+      - uses: actions/checkout@v4
       - name: Create a disposable Windows executable
         shell: pwsh
         run: |
@@ -46,3 +48,9 @@ jobs:
           $signature.SignerCertificate.Extensions |
             Where-Object { $_.Oid.Value -eq '2.5.29.37' } |
             ForEach-Object { $_.EnhancedKeyUsages | ForEach-Object { Write-Host $_.Value } }
+      - name: Test the packaged updater's verifier against the signed file
+        shell: pwsh
+        env:
+          AGENETIC_PROFILE_EKU: 1.3.6.1.4.1.311.97.195110185.989389674.218214560.908509447
+        run: |
+          node -e "const path=require('node:path'); require('./desktop/updates.cjs').verifyInstaller(path.join(process.env.RUNNER_TEMP,'probe.exe'), [], undefined, process.env.AGENETIC_PROFILE_EKU).then(error=>{if(error){console.error(error);process.exitCode=1}else console.log('Updater accepts the signed test file')})"

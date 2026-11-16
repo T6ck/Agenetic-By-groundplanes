@@ -6,11 +6,13 @@ function verifyInstaller(file,thumbprints,run=execFile,profileEku=''){
   const azureProfile = /^1\.3\.6\.1\.4\.1\.311\.97\.(?:[0-9]+\.){3}[0-9]+$/.test(profileEku);
   if(!azureProfile&&!pins.length)return resolve('No trusted release signer configured.');
   const script = [
+   '$ErrorActionPreference="Stop"',
    '$s=Get-AuthenticodeSignature -LiteralPath $env:AGENETIC_VERIFY_FILE -ErrorAction Stop',
+   'if (!$s) { throw "No Authenticode result for $env:AGENETIC_VERIFY_FILE" }',
    '$eku=@($s.SignerCertificate.Extensions | Where-Object {$_.Oid.Value -eq "2.5.29.37"} | ForEach-Object {([System.Security.Cryptography.X509Certificates.X509EnhancedKeyUsageExtension]::new($_, $_.Critical)).EnhancedKeyUsages} | ForEach-Object {$_.Value})',
    '@{status=[string]$s.Status; thumbprint=[string]$s.SignerCertificate.Thumbprint; eku=$eku; timestamped=[bool]$s.TimeStamperCertificate}|ConvertTo-Json -Compress'
   ].join('; ');
-  run('powershell.exe',['-NoProfile','-NonInteractive','-Command',script],{windowsHide:true,timeout:30000,env:{...process.env,AGENETIC_VERIFY_FILE:absolutePath(file)}},(error,stdout)=>{
+  run('powershell.exe',['-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(script,'utf16le').toString('base64')],{windowsHide:true,timeout:30000,env:{...process.env,AGENETIC_VERIFY_FILE:absolutePath(file)}},(error,stdout)=>{
    if(error)return resolve('Windows could not read the installer signature.');
    try {
     const signature = JSON.parse(stdout);

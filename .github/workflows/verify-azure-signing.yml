@@ -53,4 +53,6 @@ jobs:
         env:
           AGENETIC_PROFILE_EKU: 1.3.6.1.4.1.311.97.195110185.989389674.218214560.908509447
         run: |
+          $env:AGENETIC_VERIFY_FILE = Join-Path $env:RUNNER_TEMP 'probe.exe'
+          powershell.exe -NoProfile -NonInteractive -Command 'Get-AuthenticodeSignature -LiteralPath $env:AGENETIC_VERIFY_FILE | Select-Object Status, StatusMessage | Format-List'
           node -e "const path=require('node:path'); require('./desktop/updates.cjs').verifyInstaller(path.join(process.env.RUNNER_TEMP,'probe.exe'), [], undefined, process.env.AGENETIC_PROFILE_EKU).then(error=>{if(error){console.error(error);process.exitCode=1}else console.log('Updater accepts the signed test file')})"

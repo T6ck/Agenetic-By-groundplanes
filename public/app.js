@@ -462,8 +462,8 @@ async function run(agent, task, form){
    model: model.name, model_id: model.companionId || null, model_source: model.source || null,
    task, role: agent.role, instructions: [
     task.trim() === agent.task.trim() ? '' : agent.task,
-    'Write a research note for a colleague. Lead with the finding or the specific evidence gap. Cite supplied source tags beside factual claims. Report whether evidence is direct, mixed, or missing. Use plain language and concrete details. Never imply you read a source or ran a tool beyond what is provided. End with one practical next check when the evidence is incomplete.'
-   ].filter(Boolean).join('\n\n'),
+    'Write a research note for a colleague. Lead with the finding or the specific evidence gap. Cite the supplied filename beside factual claims. Report whether evidence is direct, mixed, or missing. Use plain language and concrete details. Never imply you read a source or ran a tool beyond what is provided. End with one practical next check when the evidence is incomplete.'
+   ].filter(Boolean).join('\n\n').slice(0,5000),
    context: context.text, profile
   }, {
    agent: agent.id, label: agent.name + ' · ' + task.slice(0, 80), sources: context.sources,

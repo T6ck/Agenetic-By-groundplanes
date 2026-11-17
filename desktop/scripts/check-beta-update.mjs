@@ -2,6 +2,9 @@ import assert from 'node:assert/strict';
 import {execFileSync, spawn} from 'node:child_process';
 import {existsSync, statSync} from 'node:fs';
 import {join} from 'node:path';
+import {createRequire} from 'node:module';
+
+const {isLocal} = createRequire(import.meta.url)('../security.cjs');
 import {setTimeout as wait} from 'node:timers/promises';
 
 const version = process.env.VERSION;
@@ -47,7 +50,7 @@ async function findPage(processHandle) {
   try {
    const result = await fetch('http://127.0.0.1:'+port+'/json/list', {signal:AbortSignal.timeout(1000)});
    const pages = await result.json();
-   return pages.find(page => page.type === 'page' && page.url.startsWith('http://127.0.0.1:'));
+   return pages.find(page => page.type === 'page' && isLocal(page.url));
   } catch { return null; }
  },45000);
 }

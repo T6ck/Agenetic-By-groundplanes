@@ -400,7 +400,7 @@ document.addEventListener('input',e=>{
   }
 });
 document.addEventListener('submit',async e=>{
-  if(e.target.id==='studio-editor'){e.preventDefault();if(await saveEditor()){render();toast('Saved.')}return}
+  if(e.target.id==='studio-editor'){e.preventDefault();if(await saveEditor()){studio.inspector=false;render();toast('Saved.')}return}
   if(e.target.id==='new-space'){
     e.preventDefault();const name=new FormData(e.target).get('name').trim();if(!name)return;
     await commitStudio(()=>{const id=crypto.randomUUID();data.spaces.push({id,name,members:[],positions:{},groups:[]});data.activeSpace=id;studio.selected.clear();studio.inspector=false;studio.view={x:0,y:0,scale:1}});$('#dialog').close();return;

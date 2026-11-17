@@ -13,7 +13,7 @@ function toast(s){$('#toast').textContent=s;clearTimeout(timer);timer=setTimeout
 async function change(fn, files=[], remove=[]){const prev=structuredClone(data);fn();try{await save(files,remove);render();return true}catch(e){data=prev;toast('Could not save on this device. Check browser storage.');return false}}
 function log(title,detail,type){data.logs.unshift({title,detail,type,time:new Date().toISOString()});data.logs=data.logs.slice(0,100)}
 function intro(title,description,tag=''){return '<section class="intro"><div><div class="eyebrow">AGENETIC / WORKSPACE</div><h1>'+title+'</h1><p>'+description+'</p></div>'+tag+'</section>'}
-const btn=(action,label,id='')=>'<button data-act="'+action+'" data-id="'+esc(id)+'">'+label+'</button>';
+const btn=(action,label,id='')=>'<button type="button" data-act="'+action+'" data-id="'+esc(id)+'">'+label+'</button>';
 const header=(title,sub='',right='')=>'<div class="panel-head"><div><h2>'+title+'</h2>'+(sub?'<p>'+sub+'</p>':'')+'</div>'+right+'</div>';
 const empty=s=>'<div class="empty">'+s+'</div>';
 function agentRow(a){return '<button class="agent-row" data-act="agent" data-id="'+esc(a.id)+'">'+box('Agents')+'<span class="row-main"><strong>'+esc(a.name)+'</strong><small>'+esc(a.role)+'</small></span><span class="pill '+(a.sample?'':'green')+'">'+(a.sample?'Sample':a.model?'Ready':'Setup')+'</span></button>'}
@@ -48,7 +48,7 @@ function render(){
  document.body.classList.toggle('immersive',page==='Overview'||page==='Graph'); $('#crumb').textContent=page==='Overview'||page==='Graph'?'Personal space / Untitled constellation': 'Personal space / '+page;
  const counts=[['Agents',data.agents.length,'','Agent profiles'],['Vault',data.files.length,'mint','Knowledge files'],['Models',data.models.length,'blue','Local models'],['Activity',data.logs.filter(r=>r.run).length,'peach','Completed runs']];
  const views={
- Overview:()=>'<div class="canvas-title"><span class="eyebrow">PERSONAL SPACE</span><h1>Your constellation</h1><p>Ideas become context. Context becomes action.</p></div>'+graphPanel(true)+'<div class="canvas-dock">'+btn('new','＋ Agent')+btn('note','＋ Note')+btn('go','Import files','Vault')+btn('go','Models','Models')+'</div><div class="canvas-status"><span>● ON DEVICE</span><span>'+data.agents.length+' agents · '+data.files.length+' documents</span></div>',
+ Overview:()=>'<div class="canvas-title"><span class="eyebrow">PERSONAL SPACE</span><h1>Your constellation</h1><p>Open a note, inspect its links, or run a connected research task.</p></div>'+graphPanel(true)+'<div class="canvas-dock">'+btn('new','＋ Agent')+btn('note','＋ Note')+btn('go','Import files','Vault')+btn('go','Models','Models')+'</div><div class="canvas-status"><span>● ON DEVICE</span><span>'+data.agents.length+' agents · '+data.files.length+' documents</span></div>',
 
  Graph:()=>intro('Knowledge graph','Select an agent, a knowledge file, or a model to inspect it.')+graphPanel(true),
  Agents:()=>intro('Agents','Define an agent’s role, assign knowledge, and run a task.')+'<div class="panel list">'+header('Agent profiles','',btn('new','＋ New agent'))+(data.agents.map(agentRow).join('')||empty('No agent profiles yet.'))+'</div>',
@@ -131,7 +131,10 @@ function reviewResearchDraft(draft){
     step:draft.research.step, draft:draft.id, agent:draft.research.agent, statement:claim, stepTask:draft.research.stepTask
     });
    });
-   if (saved) reviewResearchDraft(draft);
+   if (saved && form.isConnected && $('#dialog').open) {
+    $('#dialog').close();
+    toast('Claim saved to the graph.');
+   }
   } finally {button.disabled = false;}
  };
 }
@@ -457,7 +460,10 @@ async function run(agent, task, form){
  try {
   const result = await localModelRequest({
    model: model.name, model_id: model.companionId || null, model_source: model.source || null,
-   task, role: agent.role, instructions: task.trim() === agent.task.trim() ? '' : agent.task,
+   task, role: agent.role, instructions: [
+    task.trim() === agent.task.trim() ? '' : agent.task,
+    'Write a research note for a colleague. Lead with the finding or the specific evidence gap. Cite supplied source tags beside factual claims. Report whether evidence is direct, mixed, or missing. Use plain language and concrete details. Never imply you read a source or ran a tool beyond what is provided. End with one practical next check when the evidence is incomplete.'
+   ].filter(Boolean).join('\n\n'),
    context: context.text, profile
   }, {
    agent: agent.id, label: agent.name + ' · ' + task.slice(0, 80), sources: context.sources,
@@ -505,7 +511,7 @@ async function run(agent, task, form){
 async function act(action,id){
  const a=data.agents.find(x=>x.id===id),f=data.files.find(x=>x.id===id),m=data.models.find(x=>x.id===id);
  if(action==='go'){page=id;zoom=1;$('#dialog').close();render();window.scrollTo(0,0);return}
- if(action==='note')return modal('New knowledge note','<form id="noteForm"><label class="field">Title<input name="title" required maxlength="100"></label><label class="field">Note<textarea name="text" required maxlength="50000"></textarea></label><button class="primary">Add to constellation</button></form>');
+ if(action==='note')return modal('New knowledge note','<form id="noteForm"><label class="field">Title<input name="title" required maxlength="100"></label><label class="field">Note<textarea name="text" required maxlength="50000"></textarea></label><button class="primary">Save note</button></form>');
  if(action==='new')return agentForm();
  if(action==='edit'&&a)return agentForm(a);
  if(action==='agent'&&a)return showAgent(a);

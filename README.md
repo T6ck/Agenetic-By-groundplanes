@@ -27,3 +27,11 @@ Agenetic is free for personal use. Commercial use requires a license from Ground
 - [Beta testing and release process](CONTRIBUTING.md)
 - [Private security reporting](SECURITY.md)
 - [Groundplanes](https://groundplanes.com) · [hello@groundplanes.com](mailto:hello@groundplanes.com) · [@GroundplanesCo](https://x.com/GroundplanesCo)
+
+## Research workflow and beta limits
+
+The research project flow connects Plan, Sources, Review and Brief. Inspect selected passages, review claims and approve brief updates. New reviewed evidence retains source revisions so changed material can be checked again.
+
+[Implementation and remaining gates](docs/research-project-implementation.md) · [Source preview](docs/screenshots/project-sources.png) · [Graph view](docs/screenshots/porcelain-graph.png)
+
+Screenshots show example/test data, not validated findings. Features on main can precede a downloadable release; check its release notes.

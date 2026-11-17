@@ -78,7 +78,7 @@ async function evaluate(page, expression, timeout = 10000) {
  });
 }
 
-const launch = () => spawn(executable,['--remote-debugging-port='+port,'--remote-debugging-address=127.0.0.1'],{stdio:'ignore',env:childEnvironment});
+const launch = () => spawn(executable,['--remote-debugging-port='+port,'--remote-debugging-address=127.0.0.1'],{stdio:['ignore','inherit','inherit'],env:{...childEnvironment,ELECTRON_ENABLE_LOGGING:'1'}});
 let app = launch();
 try {
  const page = await findPage(app);

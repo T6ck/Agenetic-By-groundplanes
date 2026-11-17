@@ -41,6 +41,7 @@ function configureUpdates(updater,release,{packaged,platform,setTimer=setInterva
  updater.autoDownload = true;
  updater.autoInstallOnAppQuit = true;
  updater.disableWebInstaller = true;
+ updater.disableDifferentialDownload = true;
  updater.verifyUpdateCodeSignature=(_names,file)=>verifyInstaller(file,release.signerThumbprints,undefined,release.signingProfileEku);
  // Pinned electron-updater 6 otherwise skips verification when publisherName is missing.
  updater.verifySignature=file=>verifyInstaller(file,release.signerThumbprints,undefined,release.signingProfileEku);
@@ -52,7 +53,7 @@ function configureUpdates(updater,release,{packaged,platform,setTimer=setInterva
  updater.on('update-downloaded',()=>{ready=true;status='Update ready. It will install when you close Agenetic.'});
  async function check(){
   if (!pending && !ready) {
-   pending = Promise.resolve().then(()=>updater.checkForUpdates()).catch(()=>{
+   pending = Promise.resolve().then(()=>updater.checkForUpdates()).then(result=>result?.downloadPromise).catch(()=>{
     status='Update unavailable. Your current version is unchanged.';
    }).finally(()=>{pending=null;});
   }

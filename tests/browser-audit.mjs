@@ -167,6 +167,18 @@ try{
   await page.locator('[data-project-source]').first().click();await page.waitForSelector('#space-inspector:not([hidden])');
   await page.setViewportSize({width:1440,height:1000});await page.evaluate(()=>{studio.inspector=false;page='Overview';render();});
  });
+ await check('failed brief save keeps unsaved writing visible and blocks navigation',async()=>{
+  await page.evaluate(()=>{page='Research';deskState().project.tab='brief';render();window.realSave=save;save=async()=>{throw Error('Test storage quota failure');};});
+  await page.locator('#project-brief textarea').fill('Unsaved writing must survive a failed save.');
+  await page.locator('.project-tabs [data-project-tab="sources"]').click();
+  await page.waitForFunction(()=>document.querySelector('#toast').textContent.includes('Test storage quota failure'));
+  assert.equal(await page.locator('#project-brief textarea').inputValue(),'Unsaved writing must survive a failed save.');
+  assert.equal(await page.evaluate(()=>deskState().project.tab),'brief');
+  await page.evaluate(()=>{save=window.realSave;});
+  await page.locator('#project-brief button[type="submit"]').click();
+  await page.waitForFunction(()=>deskState().project.brief.text==='Unsaved writing must survive a failed save.');
+  await page.evaluate(()=>{page='Overview';render();});
+ });
  for(const theme of ['porcelain','graphite','midnight','ember','forest']){
   await page.evaluate(theme=>{appearance().theme=theme;appearance().headings='sans';appearance().depth='off';appearance().grid=true;render();},theme);
   await check(theme+' respects independent grid and heading settings',async()=>{

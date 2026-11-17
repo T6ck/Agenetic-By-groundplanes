@@ -15,7 +15,7 @@ html body.model-library-page .intro h1{font-family:Georgia,serif;font-weight:400
 html[data-theme=porcelain] body .network-stage{background-image:radial-gradient(ellipse at 15% 0%,#d2e8e866,transparent 65%),radial-gradient(ellipse at 100% 100%,#dfebe655,transparent 60%)!important}
 html[data-depth=off] body .network-stage{background-image:none!important}
 @media(max-width:900px){html body .family-header .knowledge-brand{min-width:0}.family-header .brand-family small{display:none}.family-header .knowledge-header-actions{gap:5px!important}.family-header .private-label{display:none}.library-navigation small{display:none}.library-navigation{left:12px;right:12px;padding:10px}.model-library-page #content{padding:100px 20px 36px!important}.model-library-page .intro h1{font-size:34px!important}}
-@media(max-width:600px){.library-navigation>div{gap:2px}.library-navigation button{font-size:11px;padding:6px}.model-search{flex-wrap:wrap}.model-search .field{width:100%;flex-basis:100%}.theme-options{grid-template-columns:1fr 1fr}.appearance-panel{max-width:calc(100vw - 24px)}.family-header .navigate-trigger{display:none}.family-header .knowledge-brand strong{font-size:16px!important}}
+@media(max-width:600px){.library-navigation>div{gap:2px}.library-navigation button{font-size:11px;padding:6px}.model-search{flex-wrap:wrap}.model-search .field{width:100%;flex-basis:100%}.theme-options{grid-template-columns:1fr 1fr}.appearance-panel{max-width:calc(100vw - 24px)}.family-header .navigate-trigger{display:inline-flex}.family-header .knowledge-brand strong{font-size:16px!important}}
 .explorer-toggle{display:flex;align-items:center;justify-content:center;width:32px;height:32px;padding:7px;border:0!important;border-radius:50%;background:transparent!important}.explorer-toggle svg{width:18px;height:18px}
 html[data-explorer-collapsed=true] body .knowledge-explorer{display:none!important}html[data-explorer-collapsed=true] body .network-stage{left:0!important}html[data-explorer-collapsed=true] body .knowledge-mode .space-stage{left:0!important}
 html body.mindspace #content .community-shell{display:grid;grid-template-columns:220px minmax(0,1fr) 300px;gap:24px;padding:112px 30px 28px!important;overflow:auto;align-items:start;height:100dvh;grid-template-rows:auto!important}
@@ -61,3 +61,21 @@ html body.mindspace #content .community-shell>.community-compose{position:sticky
   }
   html body.knowledge-mode .network-stage { left: 0 !important; }
 }
+
+/* Research states are written labels, independent of category colors. */
+.knowledge-file-list button .research-state{margin-left:auto;flex:none;font-size:11px;max-width:90px;white-space:normal;text-align:right;line-height:1.35}
+.review-filters{display:flex;gap:8px;margin:20px 0}
+.review-filters button{min-height:36px;padding:8px 14px;border:1px solid var(--ax-line)}
+.review-filters button[aria-pressed=true]{background:var(--ax-raised)!important;border-color:var(--ax-accent)}
+.review-queue article{display:flex;align-items:start;gap:16px;padding:20px 0;border-top:1px solid var(--ax-line)}
+.review-queue article>div{flex:1;min-width:0}
+.review-queue h3{font:500 16px/1.4 'Instrument Sans',Arial,sans-serif;margin:5px 0;overflow-wrap:anywhere}
+.review-queue p{font-size:13px;line-height:1.65;overflow-wrap:anywhere;margin:6px 0}
+.review-queue small{font-size:12px}
+.review-queue button{min-height:36px;flex:none}
+html body .navigate-trigger{min-width:36px;min-height:36px}
+html body #space-inspector .inspector-link button{min-height:32px;min-width:32px}
+html[data-headings=sans] body dialog h2{font-family:'Instrument Sans',Arial,sans-serif!important}
+html[data-depth=off] body .network-stage .grid-field{display:block}
+html[data-grid=false] body .network-stage .grid-field{display:none!important}
+@media(max-width:600px){.review-queue article{flex-direction:column;gap:8px}}

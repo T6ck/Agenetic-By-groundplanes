@@ -101,7 +101,7 @@ function reviewResearchDraft(draft){
  form.elements.source.onchange = () => {
   const source = choices.find(file=>file.id===form.elements.source.value), preview = $('#claim-source-preview');
   preview.hidden = !source;
-  preview.textContent = source?.text?.slice(0,9000)||'';
+  preview.textContent = source?.text||'';
  };
  form.onsubmit = async event => {
   event.preventDefault();
@@ -417,7 +417,7 @@ async function run(agent, task, form){
   running = true;
   submit.disabled = true;
   try {
-   const result = await saveAgentEvidence(agent, task, context, scope);
+   const result = await saveAgentEvidence(agent, task, context, scope, step);
    output.className = 'output';
    output.textContent = result.output;
    progress.textContent = result.reused ? 'Reused existing evidence.' : 'Exact excerpts saved to the research record.';

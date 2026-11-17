@@ -1,4 +1,30 @@
 'use strict';
+function researchStateLabel(node){
+ return ({pending:'Needs review',evidence:'Excerpt',supported:'Reviewed claim',unresolved:'Needs evidence',rejected:'Rejected',superseded:'Superseded'})[node.research?.state]||'Research record';
+}
+function researchReviewItems(){
+ const files=workspaceSourceFiles(),map=new Map(files.map(file=>[file.id,file]));
+ return files.filter(file=>file.research).map(file=>({file,label:researchStateLabel(file),
+  stale:['supported','evidence'].includes(file.research.state)&&!researchSourceReady(file,map)}));
+}
+function reviewQueueDialog(filter='attention'){
+ const items=researchReviewItems();
+ const visible=items.filter(({file,stale})=>filter==='all'||stale||['pending','unresolved'].includes(file.research.state));
+ modal('Research to review','<p>Review drafts, resolve missing evidence, and revisit records whose sources changed. A reviewed claim records your decision; it is not independent verification.</p>'+
+  '<div class="review-filters"><button data-review-filter="attention" aria-pressed="'+(filter==='attention')+'">Needs attention</button><button data-review-filter="all" aria-pressed="'+(filter==='all')+'">All research</button></div>'+
+  '<div class="review-queue">'+(visible.length?visible.map(({file,label,stale})=>'<article><div><small>'+esc(stale?'Source changed or unavailable':label)+'</small><h3>'+esc(file.name)+'</h3><p>'+esc((file.research.statement||file.text||'').slice(0,180))+'</p></div><button data-review-open="'+esc(file.id)+'">'+(file.research.state==='pending'?'Review claims':'Open record')+'</button></article>').join(''):'<p>No research records need attention in this workspace.</p>')+'</div>');
+}
+document.addEventListener('click',event=>{
+ const button=event.target.closest('[data-review-filter],[data-review-open]');if(!button)return;
+ if(button.dataset.reviewFilter)return reviewQueueDialog(button.dataset.reviewFilter);
+ (async()=>{
+  if(!await saveEditor())return;
+  const file=workspaceSourceFiles().find(file=>file.id===button.dataset.reviewOpen);if(!file)return;
+  if(file.research?.state==='pending')return reviewResearchDraft(file);
+  $('#dialog').close();
+  await studioCommand('focus',file.id);
+ })().catch(report);
+});
 let companionOpen=false;
 function companionState(){return data.companion??={enabled:true,suggestions:[],dismissed:[]}}
 function researchFingerprint(){return 'v2|'+data.files.map(f=>f.id+':'+(f.text||'')).join('|')}
@@ -8,16 +34,16 @@ function researchSuggestions(){const c=companionState();if(!c.enabled)return [];
  const missing=[...f.text.matchAll(/\[\[([^\]\n]+)\]\]/g)].map(m=>m[1].split('|')[0].split('#')[0]).filter(n=>!['note title','title'].includes(n.toLowerCase())&&!names.has(fileNameKey(n)));
  if(missing.length)suggestions.push({id:'reference:'+f.id,title:'Check references in '+f.name,reason:'Missing note: '+missing.slice(0,3).join(', '),sources:[f.id],mode:'Local check'});
  }c.suggestions=[...existing,...suggestions.slice(0,6)].filter(s=>!c.dismissed.includes(s.id));return c.suggestions}
-function companionPanel(){const c=companionState(),items=researchSuggestions();return '<section class="research-companion" aria-label="Research companion"><div class="research-heading"><div><span class="section-kicker">RESEARCH COMPANION</span><h2>Research follow-ups</h2></div><button data-research-close aria-label="Close research companion">'+lineIcon('close')+'</button></div><p>Review suggested tasks before adding them to the graph.</p><div class="companion-status">'+(token?'Local runner session available':'Local model disconnected')+' · '+data.files.filter(f=>f.text).length+' readable notes</div><div class="actions"><button data-research-ai>Analyze notes</button><button data-research-summary>Summarize</button><button data-research-cycle>Research cycle</button><button data-mcp-open>MCP tools</button></div><div class="research-suggestions">'+(items.length?items.map(s=>'<article><small>'+esc(s.mode)+'</small><h3>'+esc(s.title)+'</h3><p>'+esc(s.reason)+'</p><div class="source-buttons">'+s.sources.map(id=>{const f=data.files.find(f=>f.id===id);return f?'<button data-research-source="'+esc(id)+'">'+lineIcon('note')+esc(f.name)+'</button>':''}).join('')+'</div><div class="suggestion-actions"><button data-research-accept="'+esc(s.id)+'">Add task</button><button data-research-dismiss="'+esc(s.id)+'">Dismiss</button></div></article>').join(''):'<div class="research-empty">'+(data.files.some(f=>f.text)?'No open questions or missing references found by local checks. Use your model for a deeper review.':'Add a research note to get source-based suggestions. No generic tasks are generated.')+'</div>')+'</div><button data-research-disable>Disable for this profile</button></section>'}
+function companionPanel(){const c=companionState(),items=researchSuggestions();return '<section class="research-companion" aria-label="Research assistant"><div class="research-heading"><div><span class="section-kicker">RESEARCH ASSISTANT</span><h2>Research follow-ups</h2></div><button data-research-close aria-label="Close research companion">'+lineIcon('close')+'</button></div><p>Review suggested tasks before adding them to the graph.</p><div class="companion-status">'+(token?'Local runtime connected':'Local model disconnected')+' · '+data.files.filter(f=>f.text).length+' readable notes</div><div class="actions"><button data-research-ai>Analyze notes</button><button data-research-summary>Summarize</button><button data-research-cycle>Compare sources</button><button data-mcp-open>MCP tools</button></div><div class="research-suggestions">'+(items.length?items.map(s=>'<article><small>'+esc(s.mode)+'</small><h3>'+esc(s.title)+'</h3><p>'+esc(s.reason)+'</p><div class="source-buttons">'+s.sources.map(id=>{const f=data.files.find(f=>f.id===id);return f?'<button data-research-source="'+esc(id)+'">'+lineIcon('note')+esc(f.name)+'</button>':''}).join('')+'</div><div class="suggestion-actions"><button data-research-accept="'+esc(s.id)+'">Add task</button><button data-research-dismiss="'+esc(s.id)+'">Dismiss</button></div></article>').join(''):'<div class="research-empty">'+(data.files.some(f=>f.text)?'No suggestions from the current checks. Compare selected sources or create a task.':'Add a research note to get source-based suggestions. No generic tasks are generated.')+'</div>')+'</div><button data-research-disable>Disable for this profile</button></section>'}
 function setCompanionOpen(open){
  companionOpen=open;
  researchControls();
  if(open) $('[data-research-close]')?.focus();
  else $('.research-launch')?.focus();
 }
-function researchControls(){document.querySelectorAll('.research-launch,.telemetry-launch,.research-companion').forEach(e=>e.remove());if(page==='Community')return;const host=document.querySelector('.network-footer')||document.querySelector('.space-footer>div')||document.querySelector('.return-to-space');if(!host)return;const c=companionState();researchSuggestions();host.insertAdjacentHTML('beforeend',(c.enabled?'<button class="research-launch" data-research-toggle>'+lineIcon('agent')+'Companion'+(c.suggestions.length?' <span>'+c.suggestions.length+'</span>':'')+'</button>':'')+'<button class="telemetry-launch" data-telemetry>'+lineIcon('graph')+'Run trace</button>');if(companionOpen&&c.enabled)$('#content').insertAdjacentHTML('beforeend',companionPanel());updateNeuralField()}
+function researchControls(){document.querySelectorAll('.research-launch,.telemetry-launch,.research-companion').forEach(e=>e.remove());if(page==='Community')return;const host=document.querySelector('.network-footer')||document.querySelector('.space-footer>div')||document.querySelector('.return-to-space');if(!host)return;const c=companionState();researchSuggestions();host.insertAdjacentHTML('beforeend',(c.enabled?'<button class="research-launch" data-research-toggle>'+lineIcon('agent')+'Assistant'+(c.suggestions.length?' <span>'+c.suggestions.length+'</span>':'')+'</button>':'')+'<button class="telemetry-launch" data-telemetry>'+lineIcon('graph')+'Run history</button>');if(companionOpen&&c.enabled)$('#content').insertAdjacentHTML('beforeend',companionPanel());updateNeuralField()}
 const researchRender=render;render=function(){researchRender();researchControls()};
-const researchAppearance=appearancePanel;appearancePanel=function(){return researchAppearance().replace('<p class="appearance-footnote">','<label class="grid-choice"><input type="checkbox" id="companion-enabled" '+(companionState().enabled?'checked':'')+'> Research companion</label><p class="appearance-footnote">')};
+const researchAppearance=appearancePanel;appearancePanel=function(){return researchAppearance().replace('<p class="appearance-footnote">','<label class="grid-choice"><input type="checkbox" id="companion-enabled" '+(companionState().enabled?'checked':'')+'> Research assistant</label><p class="appearance-footnote">')};
 document.addEventListener('change',async e=>{if(e.target.id==='companion-enabled'){companionState().enabled=e.target.checked;companionOpen=false;await save();render()}});
 function researchInputSources(ids, focus) {
  const files = new Map(workspaceSourceFiles().map(file=>[file.id,file]));
@@ -58,7 +84,7 @@ function researchSourceDefaults() {
  return agentSourceScope({files:[...focus]},null,true).files;
 }
 function researchModelPicker() {
- return '<label class="field">Local model<select name="model" required><option value="">Select a registered model</option>'+
+ return '<label class="field">Local model<select name="model" required><option value="">Choose a model</option>'+
   data.models.map(model=>'<option value="'+esc(model.id)+'">'+esc(model.name)+'</option>').join('')+'</select></label>';
 }
 function summaryDialog() {
@@ -129,8 +155,8 @@ async function runResearchSummary(form) {
  } catch(error) {status.textContent=error.message;}
  finally {running=false;submit.disabled=false;}
 }
-function analysisDialog(){if(!companionState().enabled)return;modal('Analyze your research','<p>Select the notes and local model to use. Excerpts stay on this device and are sent only to your local runner.</p><form id="research-analysis"><label class="field">Local model<select name="model" required><option value="">Select a registered model</option>'+data.models.map(m=>'<option value="'+esc(m.id)+'">'+esc(m.name)+'</option>').join('')+'</select></label>' +sourcePicker('Research sources')+ '<small>Up to four relevant excerpts are sent per review. Suggestions are proposals, not verified findings.</small><button type="submit" class="primary" '+(!token?'disabled':'')+'>Analyze locally</button>'+(!token?'<button type="button" data-command="runtime">Connect a local model first</button>':'')+'<p id="research-analysis-status" role="status"></p></form>')}
-function tracePanel(){const events=data.runTraces||[];modal('Real execution, inspectable.','<p>Measured locally at the request boundary. Configured links do not mean a model has run. No token or GPU metrics are estimated.</p><div class="trace-list">'+(!events.length?'<div class="research-empty">No recorded model runs in this profile. Connect a local runner and execute a task to see its sources, model, elapsed time, and outcome.</div>':events.slice(0,20).map(t=>'<article><small>'+esc(new Date(t.started).toLocaleString())+' · '+esc(t.status)+'</small><h3>'+esc(t.label)+'</h3><p>'+esc(t.model)+' · '+(t.duration==null?'Request in progress':(t.duration/1000).toFixed(2)+' s')+' · '+t.contextChars+' context characters'+(t.outputChars!=null?' · '+t.outputChars+' output characters':'')+'</p><p>Sources: '+esc(t.sources.map(id=>data.files.find(f=>f.id===id)?.name||'Removed source').join(', ')||'No source excerpts')+'</p>'+(t.error?'<p>'+esc(t.error)+'</p>':'')+(t.status==='completed'&&t.output?'<button data-trace-handoff="'+t.id+'">Save draft for claim review</button>':'')+'</article>').join(''))+'</div>')}
+function analysisDialog(){if(!companionState().enabled)return;modal('Analyze your research','<p>Select the notes and local model to use. Excerpts stay on this device and are sent only to your local runner.</p><form id="research-analysis"><label class="field">Local model<select name="model" required><option value="">Choose a model</option>'+data.models.map(m=>'<option value="'+esc(m.id)+'">'+esc(m.name)+'</option>').join('')+'</select></label>' +sourcePicker('Research sources')+ '<small>Up to four relevant excerpts are sent per review. Suggestions are proposals, not verified findings.</small><button type="submit" class="primary" '+(!token?'disabled':'')+'>Analyze locally</button>'+(!token?'<button type="button" data-command="runtime">Connect a local model first</button>':'')+'<p id="research-analysis-status" role="status"></p></form>')}
+function tracePanel(){const events=data.runTraces||[];modal('Run history','<p>Measured locally at the request boundary. Configured links do not mean a model has run. No token or GPU metrics are estimated.</p><div class="trace-list">'+(!events.length?'<div class="research-empty">No recorded model runs in this profile. Connect a local runner and execute a task to see its sources, model, elapsed time, and outcome.</div>':events.slice(0,20).map(t=>'<article><small>'+esc(new Date(t.started).toLocaleString())+' · '+esc(t.status)+'</small><h3>'+esc(t.label)+'</h3><p>'+esc(t.model)+' · '+(t.duration==null?'Request in progress':(t.duration/1000).toFixed(2)+' s')+' · '+t.contextChars+' context characters'+(t.outputChars!=null?' · '+t.outputChars+' output characters':'')+'</p><p>Sources: '+esc(t.sources.map(id=>data.files.find(f=>f.id===id)?.name||'Removed source').join(', ')||'No source excerpts')+'</p>'+(t.error?'<p>'+esc(t.error)+'</p>':'')+(t.status==='completed'&&t.output?'<button data-trace-handoff="'+t.id+'">Save draft for claim review</button>':'')+'</article>').join(''))+'</div>')}
 async function localModelRequest(payload,meta={}){
  const profileId=data.profile.id,record=data;const trace={id:crypto.randomUUID(),started:Date.now(),label:meta.label||payload.task.slice(0,100),model:payload.model,agent:meta.agent||'',sources:meta.sources||data.files.filter(f=>payload.context.includes('File: '+f.name+'\n')).map(f=>f.id),contextChars:payload.context.length,status:'running'};
  record.runTraces??=[];record.runTraces.unshift(trace);record.runTraces=record.runTraces.slice(0,100);const start=performance.now();
@@ -178,10 +204,10 @@ document.addEventListener('submit', async event=>{
  status.textContent='Checking the selected excerpts for gaps…';
  try {
   const response=await localModelRequest({model:model.name,model_id:model.companionId||null,
-   model_source:model.source||null,role:'Research companion',profile:'balanced',
+   model_source:model.source||null,role:'Research assistant',profile:'balanced',
    instructions:'Give one or two short follow-up questions, each on its own line. Use the exact format S1 | What evidence would answer this? Use only the provided source tags. No JSON, markdown, greetings, answers, or extra lines.',
    task:'Suggest useful next research questions from these excerpts.',context:sourcePrompt(sources)
-  },{label:'Research companion analysis',sources:sources.map(source=>source.id)});
+  },{label:'Research assistant analysis',sources:sources.map(source=>source.id)});
   if (data!==record || activeSpace().id!==workspace || !state.enabled || !dialog.open || !form.isConnected) return;
   const questions=parseResearchQuestions(response.output,sources);
   const suggestions=questions.length
@@ -195,7 +221,7 @@ document.addEventListener('submit', async event=>{
   catch(error) {state.suggestions=previous;throw error;}
   if (dialog.open && form.isConnected) dialog.close();
   researchControls();
-  if (questions.length) toast('Follow-up questions saved. Find them in Companion.');
+  if (questions.length) toast('Follow-up questions saved. Find them in Assistant.');
   if (!questions.length) toast('The model returned no complete follow-up questions. Added source review suggestions instead.');
  } catch(error) {status.textContent=error.message;}
  finally {running=false;submit.disabled=false;}

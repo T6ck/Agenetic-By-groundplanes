@@ -1,11 +1,12 @@
 'use strict';
 let removalPending=false;
-function confirmRemoval(title,description,label='Confirm removal'){
+function confirmRemoval(title,description,label='Confirm removal',tone){
+ tone??=/delete|remove|replace|clear|reset/i.test(title+' '+label)?'danger':'primary';
  if(removalPending)return Promise.resolve(false);
  removalPending=true;
  return new Promise(resolve=>{
   const d=document.createElement('dialog');d.className='removal-dialog';d.setAttribute('aria-labelledby','removal-title');
-  d.innerHTML='<div class="pad"><span class="section-kicker">PLEASE CONFIRM</span><h2 id="removal-title">'+esc(title)+'</h2><p>'+esc(description)+'</p><div class="confirm-actions"><button data-cancel autofocus>Cancel</button><button data-confirm class="danger" disabled>'+esc(label)+'</button></div></div>';
+  d.innerHTML='<div class="pad"><span class="section-kicker">PLEASE CONFIRM</span><h2 id="removal-title">'+esc(title)+'</h2><p>'+esc(description)+'</p><div class="confirm-actions"><button data-cancel autofocus>Cancel</button><button data-confirm class="'+tone+'" disabled>'+esc(label)+'</button></div></div>';
   document.body.append(d);let done=false;const finish=value=>{if(done)return;done=true;d.close();d.remove();removalPending=false;resolve(value)};
   d.querySelector('[data-cancel]').onclick=()=>finish(false);d.querySelector('[data-confirm]').onclick=()=>finish(true);d.addEventListener('cancel',e=>{e.preventDefault();finish(false)});d.showModal();d.querySelector('[data-cancel]').focus();setTimeout(()=>{if(d.isConnected)d.querySelector('[data-confirm]').disabled=false},400);
  });
@@ -23,10 +24,10 @@ function supportAgenetic(){
     '<div class="policy-row"><span>WATER ACCESS</span><div><h3>5% goes to Water.org</h3><p>Groundplanes sets aside 5% of Agenetic donations to support Water.org’s work expanding access to safe water and sanitation.</p><a href="https://water.org/donate" target="_blank" rel="noopener noreferrer">Give directly to Water.org</a></div></div>'+
     '<p class="policy-detail">Choose your amount at Stripe checkout. Contributions to Groundplanes are optional, one-time, and not tax-deductible. Agenetic is free for personal use.</p></section>');
 }
+function aboutAgenetic(){modal('About Agenetic','<p>Agenetic by Groundplanes. A local workspace for research and connected tasks.</p><div class="about-actions"><button data-destination="releases">Version and updates</button><button data-support>Support Agenetic</button><button data-use-policy>Personal and commercial use</button><button data-destination="backup">Backup and restore</button></div>')}
 function addProductControls(){
- const host=document.querySelector('.knowledge-explorer-footer')||document.querySelector('.space-footer>div')||document.querySelector('.community-nav')||document.querySelector('#system');
- if(host&&!host.querySelector('[data-support]'))host.insertAdjacentHTML('beforeend','<button class="use-policy-link" data-support><span>Support Agenetic</span></button>');
- if(host&&!host.querySelector('[data-use-policy]'))host.insertAdjacentHTML('beforeend','<button class="use-policy-link" data-use-policy>'+lineIcon('note')+'<span>Personal & commercial use</span></button>');
+ const host=document.querySelector('.knowledge-explorer-footer');
+ if(host&&!host.querySelector('[data-destination="about"]'))host.insertAdjacentHTML('beforeend','<button data-destination="review">'+lineIcon('review')+'Review queue</button><button data-destination="about">About Agenetic</button>');
 }
 document.addEventListener('click',e=>{if(e.target.closest('[data-use-policy]'))usePolicy();if(e.target.closest('[data-support]'))supportAgenetic()});
 function syncDepth(){const a=appearance();document.documentElement.dataset.depth=a.depth||'subtle';for(const s of document.querySelectorAll('.network-stage,.space-stage')){if(!s.querySelector('.depth-field')){const layer=document.createElement('div');layer.className='depth-field';layer.setAttribute('aria-hidden','true');layer.innerHTML='<i class="depth-wash"></i><i class="depth-contour contour-one"></i><i class="depth-contour contour-two"></i><i class="depth-mesh"></i>';s.prepend(layer)}}}

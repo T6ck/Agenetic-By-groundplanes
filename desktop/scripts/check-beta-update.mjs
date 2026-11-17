@@ -29,7 +29,7 @@ github(['release','download',previous,'--pattern',installer,'--dir',temp]);
 execFileSync(join(temp,installer), ['/S','/D='+target], {stdio:'inherit', timeout:180000});
 assert.ok(existsSync(executable), 'Silent installation did not produce Agenetic.exe');
 
-const port = 9321;
+let port = 9321;
 const payload = join(target,'resources','app.asar');
 const previousPayload = statSync(payload).mtimeMs;
 const {GH_TOKEN: _token, ...childEnvironment} = process.env;
@@ -99,6 +99,8 @@ try {
    return statSync(payload).mtimeMs !== previousPayload;
   } catch { return false; }
  },120000,3000);
+ // The previous DevTools socket can remain reserved briefly after Windows exits.
+ port++;
  app = launch();
  const installed = await evaluate(await findPage(app),check,45000);
  assert.equal(installed.version,version,'Relaunch should report the newly installed version');

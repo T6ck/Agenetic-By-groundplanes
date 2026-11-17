@@ -130,6 +130,55 @@ try{
    source.text=original;job.status='cancelled';await save();
   });
  });
+ await check('research sections preserve brief edits and show exact source preflight',async()=>{
+  await page.evaluate(()=>{page='Research';projectModule.ensureProject(deskState()).tab='plan';render();});
+  await page.locator('.project-tabs [data-project-tab="sources"]').click();
+  await page.waitForSelector('.project-source blockquote');
+  assert.match(await page.locator('.project-panel').innerText(),/characters scanned/);
+  await page.screenshot({path:out+'/project-sources.png'});
+  await page.locator('.project-tabs [data-project-tab="brief"]').click();
+  await page.locator('#project-brief textarea').fill('My own careful research notes.');
+  await page.locator('.project-tabs [data-project-tab="review"]').click();
+  await page.locator('.project-tabs [data-project-tab="brief"]').click();
+  assert.equal(await page.locator('#project-brief textarea').inputValue(),'My own careful research notes.');
+  await page.locator('[data-brief-propose]').click();
+  // With no supported claims, the user's writing remains intact.
+  assert.equal(await page.locator('#project-brief textarea').inputValue(),'My own careful research notes.');
+  await page.screenshot({path:out+'/project-brief.png'});
+  await page.evaluate(()=>{page='Overview';render();});
+ });
+ await check('reviewed briefs require approval, keep versions, and flag changed source revisions',async()=>{
+  await page.evaluate(()=>{
+   const source=data.files.find(f=>f.id===deskState().sources[0]);
+   const claim=appendResearchNode({name:'Reviewed observation',text:'A limited observation with evidence.',state:'supported',statement:'The project uses a configured research workflow.',sources:[source.id],quotes:[{id:source.id,excerpt:source.text.slice(0,80)}]});
+   window.projectClaim=claim.id;page='Research';deskState().project.tab='brief';render();
+  });
+  await page.locator('[data-brief-propose]').click();await page.waitForSelector('.brief-proposal');
+  assert.match(await page.locator('.brief-diff').innerText(),/My own careful research notes/);
+  await page.locator('[data-brief-apply]').click();await page.waitForFunction(()=>!document.querySelector('.brief-proposal')&&document.querySelector('#project-brief textarea').value.includes('configured research workflow')); 
+  assert.match(await page.locator('#project-brief textarea').inputValue(),/configured research workflow/);
+  await page.evaluate(()=>{data.files.find(f=>f.id===deskState().sources[0]).text+=' New conflicting information.';render();});
+  assert.match(await page.locator('.project-warning').innerText(),/evidence changed/);
+  await page.locator('[data-brief-undo]').click();await page.waitForFunction(()=>document.querySelector('#project-brief textarea').value==='My own careful research notes.');
+  await page.setViewportSize({width:390,height:900});
+  await page.locator('.project-tabs [data-project-tab="sources"]').click();
+  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+  await page.screenshot({path:out+'/project-mobile.png'});
+  await page.locator('[data-project-source]').first().click();await page.waitForSelector('#space-inspector:not([hidden])');
+  await page.setViewportSize({width:1440,height:1000});await page.evaluate(()=>{studio.inspector=false;page='Overview';render();});
+ });
+ await check('failed brief save keeps unsaved writing visible and blocks navigation',async()=>{
+  await page.evaluate(()=>{page='Research';deskState().project.tab='brief';render();window.realSave=save;save=async()=>{throw Error('Test storage quota failure');};});
+  await page.locator('#project-brief textarea').fill('Unsaved writing must survive a failed save.');
+  await page.locator('.project-tabs [data-project-tab="sources"]').click();
+  await page.waitForFunction(()=>document.querySelector('#toast').textContent.includes('Test storage quota failure'));
+  assert.equal(await page.locator('#project-brief textarea').inputValue(),'Unsaved writing must survive a failed save.');
+  assert.equal(await page.evaluate(()=>deskState().project.tab),'brief');
+  await page.evaluate(()=>{save=window.realSave;});
+  await page.locator('#project-brief button[type="submit"]').click();
+  await page.waitForFunction(()=>deskState().project.brief.text==='Unsaved writing must survive a failed save.');
+  await page.evaluate(()=>{page='Overview';render();});
+ });
  for(const theme of ['porcelain','graphite','midnight','ember','forest']){
   await page.evaluate(theme=>{appearance().theme=theme;appearance().headings='sans';appearance().depth='off';appearance().grid=true;render();},theme);
   await check(theme+' respects independent grid and heading settings',async()=>{

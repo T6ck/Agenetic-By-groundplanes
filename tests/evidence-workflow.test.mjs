@@ -104,3 +104,9 @@ test('multiple targets share prerequisites only once', () => {
  data.links.push({from:'first',to:'unrelated'});
  assert.deepEqual(Array.from(api.evidenceWorkflow(['second','unrelated']),task=>task.id), ['first','second','unrelated']);
 });
+
+test('reviewed evidence becomes stale after edits outside its quoted passage',()=>{
+ const {api,data}=fixture();const claim=api.appendResearchNode({name:'Reviewed',text:'Limited observation.',state:'supported',sources:['direct'],quotes:[{id:'direct',excerpt:'Temperature was 18 C.'}]});
+ const map=new Map(data.files.map(f=>[f.id,f]));assert.equal(api.researchSourceReady(claim,map),true);
+ data.files[0].text+=' A later correction changes the interpretation.';assert.equal(api.researchSourceReady(claim,map),false);
+});

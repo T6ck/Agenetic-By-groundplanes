@@ -66,14 +66,22 @@ function researchSourceReady(file, files, chain = new Set()){
  if (!research) return !file.originTrace && !/^## Evidence review\n[\s\S]*\n## Critical review\n/.test(file.text);
  if (!['evidence','supported'].includes(research.state) || !research.quotes?.length || file.text!==research.reviewedText) return false;
  const visited = new Set(chain).add(file.id);
- return research.quotes.every(({id, excerpt}) => {
+ return research.quotes.every(({id, excerpt, revision}) => {
   const source = files.get(id);
   return (data.links||[]).some(link=>link.from===id&&link.to===file.id) &&
-   source?.text?.includes(excerpt) && researchSourceReady(source, files, visited);
+   source?.text?.includes(excerpt) && (!revision || (activeSpace().sourceRevisions||[]).some(r=>r.id===revision&&r.source===id&&r.text===source.text)) && researchSourceReady(source, files, visited);
  });
 }
 function appendResearchNode({name, text, state, sources, quotes = [], step = '', draft = '', agent = '', statement = '', stepTask = ''}){
  const space = activeSpace();
+ if(['evidence','supported'].includes(state)){
+  space.sourceRevisions??=[];
+  quotes=quotes.map(quote=>{const source=data.files.find(f=>f.id===quote.id);if(!source)return quote;
+   let revision=space.sourceRevisions.find(r=>r.source===source.id&&r.text===source.text);
+   if(!revision){revision={id:crypto.randomUUID(),source:source.id,name:source.name,text:source.text,time:Date.now()};space.sourceRevisions.push(revision);}
+   return {...quote,revision:revision.id};
+  });
+ }
  const node = {id:crypto.randomUUID(),name:name.slice(0,120),text,size:new Blob([text]).size,
   research:{state, sources:[...new Set(sources)].slice(0,20), quotes, step, draft, agent, statement, stepTask, reviewedText:['evidence','supported'].includes(state)?text:'', workspace:space.id}};
  data.links ??= [];
@@ -96,6 +104,7 @@ function reviewResearchDraft(draft){
   '<label class="field">Decision<select name="decision"><option value="supported">Supported by the quoted source</option><option value="unresolved">Needs more evidence</option><option value="rejected">Rejected</option></select></label>'+
   '<label class="field">Original connected source<select name="source"><option value="">Choose a source</option>'+choices.map(file=>'<option value="'+esc(file.id)+'">'+esc(file.name)+'</option>').join('')+'</select></label>'+
   '<pre id="claim-source-preview" class="output" hidden></pre><label class="field">Exact supporting quote<textarea name="quote" maxlength="1200"></textarea></label>'+
+  '<label class="field">Reason for this decision<textarea name="rationale" maxlength="1600" placeholder="Explain what the source establishes and any limits."></textarea></label>'+
   '<button type="submit" class="primary">Save reviewed claim</button><p role="status"></p></form>');
  const form = $('#claim-review'), record = data;
  form.elements.source.onchange = () => {
@@ -125,11 +134,12 @@ function reviewResearchDraft(draft){
     for (const file of reviewed) {
      if (file.research.statement?.toLowerCase()===claim.toLowerCase()) file.research.state='superseded';
     }
-    appendResearchNode({
+    const reviewedClaim=appendResearchNode({
     name:'Claim · '+claim, text:verified?claim+'\n\nSupporting excerpt from '+source.name+':\n'+excerpt:claim,
     state:decision, sources:verified?[source.id]:[], quotes:verified?[{id:source.id,excerpt}]:[],
     step:draft.research.step, draft:draft.id, agent:draft.research.agent, statement:claim, stepTask:draft.research.stepTask
     });
+    reviewedClaim.research.decision={value:decision,rationale:String(values.get('rationale')||'').trim(),time:Date.now()};
    });
    if (saved && form.isConnected && $('#dialog').open) {
     $('#dialog').close();

@@ -1,0 +1,17 @@
+name: Commercial access checks
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  access:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci --prefix tests/commercial
+      - run: npm test --prefix tests/commercial
+      - run: node --test tests/business.test.mjs

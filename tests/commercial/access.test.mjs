@@ -1,0 +1,52 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {readFile,readdir} from 'node:fs/promises';
+import {PGlite} from '@electric-sql/pglite';
+import {randomUUID} from 'node:crypto';
+test('commercial isolation, seats, replay, revisions and lifecycle',async()=>{
+ const db=new PGlite();
+ try{
+ await db.exec('create schema auth; create table auth.users(id uuid primary key,email text,email_confirmed_at timestamptz); create role anon; create role authenticated; create role service_role;');
+ const dir=new URL('../../supabase/migrations/',import.meta.url);
+ // The mail schedule uses Supabase's pg_cron and pg_net extensions; PGlite tests the domain schema only.
+ for(const f of (await readdir(dir)).filter(f=>f.endsWith('.sql')&&!f.includes('mail_schedule')).sort())await db.exec(await readFile(new URL(f,dir),'utf8'));
+ const owner=randomUUID(),member=randomUUID(),outsider=randomUUID();
+ for(const [id,email] of [[owner,'owner@example.test'],[member,'member@example.test'],[outsider,'outsider@example.test']])await db.query('insert into auth.users values($1,$2,now())',[id,email]);
+ const cmd=async(user,action,body={})=>(await db.query('select public.agenetic_command($1,$2,$3) result',[user,action,{request_id:randomUUID(),...body}])).rows[0].result;
+ const team=(await cmd(owner,'create_team',{name:'Test lab'})).id;
+ await assert.rejects(cmd(outsider,'status',{team_id:team}),/not available/);
+ await assert.rejects(cmd(owner,'entitlement',{team_id:team}),/active team subscription/);
+ await db.query("update public.agenetic_teams set customer_id='cus_test' where id=$1",[team]);
+ const bill=async(event,status='active',version=1,subscription='sub_test',risk=false)=>(await db.query("select public.agenetic_billing_apply($1,'test','cus_test',$2,$3,2,now()+interval '30 days',false,$4,$5) result",[event,subscription,status,version,risk])).rows[0].result;
+ await bill('evt_1');assert.deepEqual(await bill('evt_1'),{duplicate:true});
+ const entitlementID=randomUUID();await cmd(owner,'entitlement',{team_id:team,request_id:entitlementID});
+ const inviteBody={team_id:team,email:'member@example.test',role:'member',token:'a'.repeat(64),token_hash:'a'.repeat(64),request_id:randomUUID()};
+ const inv=await cmd(owner,'invite',inviteBody);assert.deepEqual(await cmd(owner,'invite',inviteBody),inv);
+ await assert.rejects(cmd(owner,'invite',{...inviteBody,request_id:randomUUID(),email:'other@example.test'}),/All seats/);
+ await assert.rejects(cmd(outsider,'accept',{token_hash:inviteBody.token_hash}),/invited email/);
+ await cmd(member,'accept',{token_hash:inviteBody.token_hash});
+ await assert.rejects(cmd(member,'billing_context',{team_id:team}),/administrator/);
+ const project=await cmd(member,'project_put',{team_id:team,name:'Notes',package:{hello:'world'}});
+ await assert.rejects(cmd(owner,'project_put',{team_id:team,id:project.id,revision:0,name:'stale',package:{}}),/Project changed/);
+ await assert.rejects(cmd(outsider,'project_get',{team_id:team,id:project.id}),/not available/);
+ const keyBody={team_id:team,name:'Laptop',key_hash:'hash',request_id:randomUUID()};const key=await cmd(member,'key_create',keyBody);
+ await assert.rejects(cmd(member,'key_create',keyBody),/already created/);
+ await cmd(owner,'remove',{team_id:team,user_id:member});
+ assert.ok((await db.query('select revoked_at from public.agenetic_keys where id=$1',[key.id])).rows[0].revoked_at);
+ await assert.rejects(cmd(member,'status',{team_id:team}),/not available/);
+ await bill('evt_cancel','canceled',2);
+ await assert.rejects(cmd(owner,'entitlement',{team_id:team,request_id:entitlementID}),/active team subscription/);
+ await bill('evt_stale','active',1);
+ assert.equal((await cmd(owner,'status',{team_id:team})).team.status,'canceled');
+ await bill('evt_new','active',3,'sub_new');
+ assert.equal((await cmd(owner,'status',{team_id:team})).team.status,'active');
+ assert.deepEqual(await bill('evt_old','canceled',4,'sub_test'),{superseded:true});
+ await bill('evt_risk','active',1,'sub_new',true);
+ await assert.rejects(cmd(owner,'entitlement',{team_id:team}),/active team subscription/);
+ const leased=(await db.query('select id from public.agenetic_mail_claim()')).rows.map(r=>r.id);
+ const again=(await db.query('select id from public.agenetic_mail_claim()')).rows.map(r=>r.id);
+ assert.ok(leased.length);assert.ok(again.every(id=>!leased.includes(id)));
+ const privileges=await db.query("select has_function_privilege('authenticated','public.agenetic_command(uuid,text,jsonb)','EXECUTE') allowed,has_table_privilege('authenticated','public.agenetic_teams','SELECT') readable");
+ assert.deepEqual(privileges.rows[0],{allowed:false,readable:false});
+ }finally{await db.close();}
+});

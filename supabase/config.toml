@@ -1,0 +1,6 @@
+[functions.agenetic-business]
+verify_jwt = false # Handler verifies with Auth getUser; device keys are checked server-side.
+[functions.agenetic-billing]
+verify_jwt = false # Stripe signature is verified before any event is processed.
+[functions.agenetic-mail]
+verify_jwt = false # Wake-up only; recipients and content come exclusively from the authorized outbox.

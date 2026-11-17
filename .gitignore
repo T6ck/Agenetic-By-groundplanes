@@ -53,3 +53,7 @@ __pycache__/
 /desktop/release/
 /desktop/build/
 /desktop/.venv/
+
+/tests/commercial/node_modules/
+/audit-results/
+/supabase/.temp/

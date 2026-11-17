@@ -41,7 +41,7 @@ function setCompanionOpen(open){
  if(open) $('[data-research-close]')?.focus();
  else $('.research-launch')?.focus();
 }
-function researchControls(){document.querySelectorAll('.research-launch,.telemetry-launch,.research-companion').forEach(e=>e.remove());if(page==='Community')return;const host=document.querySelector('.network-footer')||document.querySelector('.space-footer>div')||document.querySelector('.return-to-space');if(!host)return;const c=companionState();researchSuggestions();host.insertAdjacentHTML('beforeend',(c.enabled?'<button class="research-launch" data-research-toggle>'+lineIcon('agent')+'Assistant'+(c.suggestions.length?' <span>'+c.suggestions.length+'</span>':'')+'</button>':'')+'<button class="telemetry-launch" data-telemetry>'+lineIcon('graph')+'Run trace</button>');if(companionOpen&&c.enabled)$('#content').insertAdjacentHTML('beforeend',companionPanel());updateNeuralField()}
+function researchControls(){document.querySelectorAll('.research-launch,.telemetry-launch,.research-companion').forEach(e=>e.remove());if(page==='Community')return;const host=document.querySelector('.network-footer')||document.querySelector('.space-footer>div')||document.querySelector('.return-to-space');if(!host)return;const c=companionState();researchSuggestions();host.insertAdjacentHTML('beforeend',(c.enabled?'<button class="research-launch" data-research-toggle>'+lineIcon('agent')+'Assistant'+(c.suggestions.length?' <span>'+c.suggestions.length+'</span>':'')+'</button>':'')+'<button class="telemetry-launch" data-telemetry>'+lineIcon('graph')+'Run history</button>');if(companionOpen&&c.enabled)$('#content').insertAdjacentHTML('beforeend',companionPanel());updateNeuralField()}
 const researchRender=render;render=function(){researchRender();researchControls()};
 const researchAppearance=appearancePanel;appearancePanel=function(){return researchAppearance().replace('<p class="appearance-footnote">','<label class="grid-choice"><input type="checkbox" id="companion-enabled" '+(companionState().enabled?'checked':'')+'> Research assistant</label><p class="appearance-footnote">')};
 document.addEventListener('change',async e=>{if(e.target.id==='companion-enabled'){companionState().enabled=e.target.checked;companionOpen=false;await save();render()}});
@@ -221,7 +221,7 @@ document.addEventListener('submit', async event=>{
   catch(error) {state.suggestions=previous;throw error;}
   if (dialog.open && form.isConnected) dialog.close();
   researchControls();
-  if (questions.length) toast('Follow-up questions saved. Find them in Companion.');
+  if (questions.length) toast('Follow-up questions saved. Find them in Assistant.');
   if (!questions.length) toast('The model returned no complete follow-up questions. Added source review suggestions instead.');
  } catch(error) {status.textContent=error.message;}
  finally {running=false;submit.disabled=false;}

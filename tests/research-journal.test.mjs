@@ -23,3 +23,12 @@ test('duplicate recovery only targets exact unattended drafts with identical pro
 test('automatic placement preserves manual positions and avoids occupied slots',()=>{
  const s={graphPositions:{source:[20,30],manual:[260,30]}};placeGenerated(s,'a','source');assert.deepEqual(s.graphPositions.a,[260,140]);placeGenerated(s,'manual','source');assert.deepEqual(s.graphPositions.manual,[260,30]);
 });
+
+test('a full journal ignores an unchanged task without failing and rejects new work',()=>{
+ const j=newJournal();for(let i=0;i<200;i++){const x=queueJob(j,task(String(i),String(i)));x.status='needs_review';}
+ assert.equal(queueJob(j,task('0','0')),null);assert.throws(()=>queueJob(j,task('new','new')),/200 tasks/);
+});
+test('twenty unfinished tasks bound the queue and cancelled tasks release capacity',()=>{
+ const j=newJournal();for(let i=0;i<20;i++)queueJob(j,task(String(i),String(i)));
+ assert.throws(()=>queueJob(j,task('new','new')),/20 unfinished/);j.jobs[0].status='cancelled';assert.ok(queueJob(j,task('new','new')));
+});

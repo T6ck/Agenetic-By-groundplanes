@@ -2,7 +2,7 @@
 // Shared object vocabulary and reading surfaces.
 function objectLabel(n){
  if(n.kind==='file')return n.research?researchStateLabel(n):(n.pdfIndex||n.size&&!n.text?'Source':'Note');
- if(n.kind==='task')return n.researchJob?'Research task':({complete:'Complete','in progress':'Running',planned:'Task'})[n.status]||'Task';
+ if(n.kind==='task')return ({complete:'Complete','in progress':'Running',planned:'Task',paused:'Paused',blocked:'Blocked',cancelled:'Cancelled'})[n.status]||'Task';
  return n.kind==='model'?'Model':'Agent';
 }
 function nodeState(n){
@@ -30,7 +30,7 @@ drawInspector=function(){
  const node=data.files.find(f=>f.id===form.dataset.key);if(!node||!node.text)return;
  const body=form.querySelector('textarea[name=text]');if(!body)return;
  if(!el.querySelector('.reader-tabs')){
-  form.insertAdjacentHTML('beforebegin','<div class="reader-tabs" role="group" aria-label="Document mode"><button data-reader-mode="read" aria-pressed="true">Read</button><button data-reader-mode="edit" aria-pressed="false">'+(node.research?'Inspect text':'Edit')+'</button></div><section class="source-reader"><h2>'+esc(node.name)+'</h2><span class="state-tag">'+esc(objectLabel({...node,kind:'file'}))+'</span><div class="reader-content">'+esc(node.text)+'</div><button data-reader-original="'+esc(node.id)+'">Open original or text export</button></section>');
+  form.insertAdjacentHTML('beforebegin','<div class="reader-tabs" role="group" aria-label="Document mode"><button data-reader-mode="read" aria-pressed="true">Read</button><button data-reader-mode="edit" aria-pressed="false">'+(node.research?'Inspect text':'Edit')+'</button></div><section class="source-reader"><h2>'+esc(node.name)+'</h2><span class="state-tag">'+esc(objectLabel({...node,kind:'file'}))+'</span><div class="reader-content">'+esc(node.text)+'</div><button data-reader-original="'+esc(node.id)+'">Download source</button></section>');
   el.dataset.readerMode='read';readingNode=node.id;
  }
 };

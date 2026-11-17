@@ -99,3 +99,7 @@ html body.mindspace #content .community-shell.compose-open{grid-template-columns
 @media(prefers-reduced-motion:reduce){.depth-field,.data-packet{animation:none!important;transition:none!important}}
 
 @media(max-width:600px){html:not([data-mobile-explorer=open]) .knowledge-explorer{display:none!important}html[data-mobile-explorer=open] .knowledge-explorer{display:flex!important}.network-stage{left:0!important}.network-add{position:relative!important;top:auto!important;right:auto!important;justify-content:flex-end;padding:78px 12px 0;pointer-events:none}.network-add button{pointer-events:auto}.network-context{top:128px!important}}
+
+.desk-columns>aside{background:transparent}
+.claim-review-dialog{box-shadow:0 8px 28px rgb(0 0 0 / .12)}
+.claim-review-dialog>.pad>.output{font-family:'Instrument Sans',Arial,sans-serif}

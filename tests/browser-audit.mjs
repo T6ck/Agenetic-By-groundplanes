@@ -108,6 +108,28 @@ try{
    j.enabled=false;page='Overview';render();await save();
   });
  });
+ await check('100 overlapping scheduler ticks make one request and pause retains its checkpoint',async()=>{
+  await page.evaluate(async()=>{
+   const j=deskState();j.enabled=true;j.lastScan=Date.now();deskSession=deskKey();token='test-only';
+   const job=await deskEnqueue('Check scheduler concurrency',j.sources);
+   let release,started,calls=0;const entered=new Promise(resolve=>started=resolve),gate=new Promise(resolve=>release=resolve);
+   localModelRequest=async()=>{calls++;started();await gate;return {output:'Evidence checkpoint retained'};};
+   const ticks=Array.from({length:100},()=>deskTick());await entered;
+   if(calls!==1)throw Error('Overlapping model requests');j.enabled=false;release();await Promise.all(ticks);
+   if(calls!==1||job.status!=='interrupted'||job.steps.length!==1)throw Error('Pause did not preserve exactly one pass');
+   job.status='cancelled';await save();
+  });
+ });
+ await check('source edits during inference block stale results from entering the graph',async()=>{
+  await page.evaluate(async()=>{
+   const j=deskState();j.enabled=true;const job=await deskEnqueue('Check revision protection',j.sources);
+   const source=data.files.find(f=>f.id===j.sources[0]),original=source.text;let calls=0;
+   localModelRequest=async()=>{calls++;source.text=original+' Changed during inference.';return {output:'Stale inference result'};};
+   await deskRun(job);
+   if(calls!==1||job.status!=='blocked'||job.output||j.enabled)throw Error('Stale evidence escaped review boundary');
+   source.text=original;job.status='cancelled';await save();
+  });
+ });
  for(const theme of ['porcelain','graphite','midnight','ember','forest']){
   await page.evaluate(theme=>{appearance().theme=theme;appearance().headings='sans';appearance().depth='off';appearance().grid=true;render();},theme);
   await check(theme+' respects independent grid and heading settings',async()=>{

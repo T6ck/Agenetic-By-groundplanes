@@ -1,6 +1,6 @@
 'use strict';
 // A persistent workspace journal; navigation never owns execution.
-let deskModule,deskBusy=false,deskSession='',deskRequest='',deskStop=false,deskBooted=new Set();
+let deskModule,deskBusy=false,deskTickBusy=false,deskSession='',deskRequest='',deskStop=false,deskBooted=new Set();
 const deskReady=import('./research-journal.mjs').then(m=>deskModule=m);
 function deskState(){const s=activeSpace();return s.researchDesk??=(deskModule?deskModule.newJournal():{version:1,goal:'',model:'',sources:[],performance:'quick',intervalMinutes:15,dailyLimit:12,autoFollowups:false,organize:true,archiveDuplicates:false,enabled:false,jobs:[],events:[],seen:{},lastScan:0});}
 function deskKey(){return data.profile.id+':'+activeSpace().id;}
@@ -21,7 +21,7 @@ function deskRefresh(){
 function deskLive(){
  const j=deskState(),now=Date.now(),count=j.jobs.filter(x=>x.startedAt>now-86400000).length;
  return '<div class="desk-state-row"><span>'+esc(deskBusy?'A local request is running':j.enabled?'Waiting for queued work or source changes':'Research is paused')+'</span><span>'+count+' / '+j.dailyLimit+' runs in the last 24 hours</span></div>'+
- '<div class="desk-columns"><section><h2>Tasks</h2>'+(!j.jobs.length?'<div class="desk-empty"><h3>Start with a question and sources</h3><p>Save the setup, then start research. Results and follow-up tasks will appear here and in your graph.</p></div>':j.jobs.slice().reverse().slice(0,100).map(job=>'<article class="desk-job"><div class="desk-job-heading"><span class="state-tag">'+esc(job.status.replaceAll('_',' '))+'</span><small>'+job.steps.length+' / 3 passes</small></div><h3>'+esc(job.question)+'</h3>'+(job.error?'<p role="status">'+esc(job.error)+'</p>':'')+'<div class="actions">'+(job.output?'<button data-desk-review="'+esc(job.output)+'">Read result</button>':'')+(['proposed','interrupted','failed','blocked'].includes(job.status)?'<button data-desk-retry="'+esc(job.id)+'">Queue task</button>':'')+(['queued','interrupted','blocked','failed'].includes(job.status)?'<button data-desk-cancel="'+esc(job.id)+'">Cancel task</button>':'')+'</div>'+(job.steps.length?'<details><summary>Completed passes</summary>'+job.steps.map(s=>'<h4>'+esc(s.stage)+'</h4><pre class="output">'+esc(s.output)+'</pre>').join('')+'</details>':'')+'</article>').join(''))+'</section><aside><h2>Updates</h2><ol class="desk-events">'+(j.events.map(e=>'<li><time>'+esc(new Date(e.time).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}))+'</time><span>'+esc(e.message)+'</span></li>').join('')||'<li>No activity yet.</li>')+'</ol><h2>Duplicate recovery</h2>'+data.files.filter(f=>f.research?.archived&&f.research.workspace===activeSpace().id).map(f=>'<p>'+esc(f.name)+' <button data-desk-restore="'+esc(f.id)+'">Restore</button></p>').join('')+'<p>Only exact duplicate drafts created by this tab can be archived automatically. Original sources and reviewed claims are preserved.</p></aside></div>';
+ '<div class="desk-columns"><section><h2>Tasks</h2>'+(!j.jobs.length?'<div class="desk-empty"><h3>Start with a question and sources</h3><p>Save the setup, then start research. Results and follow-up tasks will appear here and in your graph.</p></div>':j.jobs.slice().reverse().slice(0,100).map(job=>'<article class="desk-job"><div class="desk-job-heading"><span class="state-tag">'+esc(job.status.replaceAll('_',' '))+'</span><small>'+job.steps.length+' / 3 passes</small></div><h3>'+esc(job.question)+'</h3>'+(job.error?'<p role="status">'+esc(job.error)+'</p>':'')+'<div class="actions">'+(job.output?'<button data-desk-review="'+esc(job.output)+'">Read result</button>':'')+(['proposed','interrupted','failed','blocked'].includes(job.status)?'<button data-desk-retry="'+esc(job.id)+'">Queue task</button>':'')+(['proposed','queued','interrupted','blocked','failed'].includes(job.status)?'<button data-desk-cancel="'+esc(job.id)+'">Cancel task</button>':'')+'</div>'+(job.steps.length?'<details><summary>Completed passes</summary>'+job.steps.map(s=>'<h4>'+esc(s.stage)+'</h4><pre class="output">'+esc(s.output)+'</pre>').join('')+'</details>':'')+'</article>').join(''))+'</section><aside><h2>Updates</h2><ol class="desk-events">'+(j.events.map(e=>'<li><time>'+esc(new Date(e.time).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}))+'</time><span>'+esc(e.message)+'</span></li>').join('')||'<li>No activity yet.</li>')+'</ol><h2>Duplicate recovery</h2>'+data.files.filter(f=>f.research?.archived&&f.research.workspace===activeSpace().id).map(f=>'<p>'+esc(f.name)+' <button data-desk-restore="'+esc(f.id)+'">Restore</button></p>').join('')+'<p>Only exact duplicate drafts created by this tab can be archived automatically. Original sources and reviewed claims are preserved.</p></aside></div>';
 }
 function renderDesk(){
  const j=deskState();document.body.classList.remove('knowledge-mode','studio','immersive','model-library-page');document.body.classList.add('mindspace','research-desk-page');applyAppearance();
@@ -62,6 +62,7 @@ async function deskArchiveDuplicates(){
  }
 }
 async function deskRun(job){
+ if(deskBusy||running)throw Error('Another local run is still active. This task remains queued.');
  const record=data,space=activeSpace(),j=deskState(),key=deskKey();deskBusy=true;running=true;deskStop=false;deskRequest='';
  try{
   if(await deskRevision(job.sources)!==job.revision)throw Error('Sources changed. Queue a fresh comparison; this checkpoint uses an older revision.');
@@ -97,18 +98,22 @@ async function deskRun(job){
     const child=await deskEnqueue(match[1],job.sources,job.id,job.depth+1);
     if(child){child.status=j.autoFollowups?'queued':'proposed';job.followup=child.id;deskEvent('Follow-up '+(j.autoFollowups?'queued':'proposed')+': '+match[1]);await save();}
    }
-  }else{job.status='interrupted';deskEvent('Paused with '+job.steps.length+' completed passes.');await save();}
+  }else{job.status='interrupted';if(deskTask(job))deskTask(job).status='paused';deskEvent('Paused with '+job.steps.length+' completed passes.');await save();}
  }catch(error){
-  job.status='blocked';job.error=error.message; j.enabled=false;deskModule.addEvent(j,'Stopped: '+error.message);
+  job.status='blocked';const task=record.tasks.find(t=>t.id===job.task);if(task)task.status='blocked';job.error=error.message; j.enabled=false;deskModule.addEvent(j,'Stopped: '+error.message);
   try{if(data===record)await save();else await profileStore(record);}catch{toast('Research paused because local storage could not save. Keep this window open and export a backup.');}
  }finally{deskBusy=false;running=false;deskRequest='';deskRefresh();}
 }
 async function deskTick(){
- if(!data?.spaces||!db||deskBusy||running)return;await bootDesk();const j=deskState();
- if(!j.enabled)return;
- if(deskSession!==deskKey()){j.enabled=false;await save();return;}
- try{await deskScan();const job=deskModule.nextJob(j);if(job)await deskRun(job);}
- catch(error){j.enabled=false;deskEvent(error.message);await save();deskRefresh();}
+ if(!data?.spaces||!db||deskTickBusy||deskBusy||running)return;
+ deskTickBusy=true;
+ try{
+  await bootDesk();const j=deskState();
+  if(!j.enabled)return;
+  if(deskSession!==deskKey()){j.enabled=false;await save();deskRefresh();return;}
+  try{await deskScan();if(deskBusy||running)return;const job=deskModule.nextJob(j);if(job)await deskRun(job);}
+  catch(error){j.enabled=false;deskEvent(error.message);await save();deskRefresh();}
+ }finally{deskTickBusy=false;}
 }
 setInterval(()=>deskTick().catch(report),5000);
 const deskBaseRender=render;
@@ -131,7 +136,7 @@ document.addEventListener('click',event=>{
   if(b.hasAttribute('data-desk-pause')||b.hasAttribute('data-desk-stop')){j.enabled=false;if(b.hasAttribute('data-desk-stop')){deskStop=true;if(deskRequest)try{await companionCall('/cancel',{request_id:deskRequest});}catch{toast('Cancellation requested. Waiting for the current model request to finish.');}}deskEvent('Research paused.');await save();}
   if(b.hasAttribute('data-desk-scan'))await deskScan(true);
   if(b.dataset.deskRetry){const job=j.jobs.find(x=>x.id===b.dataset.deskRetry);if(!job||job.status==='running')return;if(await deskRevision(job.sources)!==job.revision){await deskEnqueue(job.question,job.sources,job.parent,job.depth);job.status='cancelled';}else{job.status='queued';job.error='';}await save();}
-  if(b.dataset.deskCancel){const job=j.jobs.find(x=>x.id===b.dataset.deskCancel);if(job&&job.status!=='running'){job.status='cancelled';await save();}}
+  if(b.dataset.deskCancel){const job=j.jobs.find(x=>x.id===b.dataset.deskCancel);if(job&&job.status!=='running'){job.status='cancelled';if(deskTask(job))deskTask(job).status='cancelled';await save();}}
   if(b.dataset.deskReview){const f=data.files.find(x=>x.id===b.dataset.deskReview);if(f)reviewResearchDraft(f);}
   if(b.dataset.deskRestore){const f=data.files.find(x=>x.id===b.dataset.deskRestore);if(f?.research){delete f.research.archived;f.research.noAutoArchive=true;activeSpace().hidden=(activeSpace().hidden||[]).filter(id=>id!==f.id);await save();}}
   deskRefresh();

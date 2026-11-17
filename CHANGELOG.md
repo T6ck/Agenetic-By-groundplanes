@@ -4,6 +4,12 @@ For installers, checksums, and notes by build, see [GitHub Releases](https://git
 
 ## 0.2.17
 
+- Add a persistent Research tab with a local task queue, source-change monitoring, saved pass checkpoints, and optional bounded follow-up questions. Research continues across views while the app stays open and the device stays awake.
+- Save results as linked drafts for claim review. Pause on changed sources or runner failures, and resume only unfinished passes. Limit concurrent requests and daily runs.
+- Place new research beside existing sources without rearranging manual layouts. Optionally archive exact duplicate generated drafts with a restore control.
+- Add document reading mode, clearer node states and navigation icons, a quieter community composer, and improved small-screen controls.
+- Verify scheduler concurrency, interruption, persistence, source revisions, themes and navigation with 72 automated tests and 18 Chromium checks. Browser model responses are controlled test fixtures; all-day real-model endurance remains under beta testing.
+
 - Show the installed version from the workspace and show the release channel before you check for updates. Apply a downloaded update from the Releases panel.
 - Share one check between startup and manual requests, and keep a downloaded update ready until it is installed.
 - Prioritize relevant excerpts from different sources so one long document cannot crowd out other evidence.

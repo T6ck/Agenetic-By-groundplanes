@@ -101,7 +101,7 @@ function reviewResearchDraft(draft){
  form.elements.source.onchange = () => {
   const source = choices.find(file=>file.id===form.elements.source.value), preview = $('#claim-source-preview');
   preview.hidden = !source;
-  preview.textContent = source?.text?.slice(0,9000)||'';
+  preview.textContent = source?.text||'';
  };
  form.onsubmit = async event => {
   event.preventDefault();

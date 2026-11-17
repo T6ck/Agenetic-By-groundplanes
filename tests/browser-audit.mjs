@@ -28,6 +28,7 @@ try{
  await page.waitForSelector('.knowledge-node');
  await check('save closes inspector and stays closed',async()=>{
   await page.locator('[data-network="open"]').first().click();
+  await page.locator('[data-reader-mode="edit"]').click();
   await page.locator('#studio-editor [name="name"]').fill('Audit source');
   await page.locator('#studio-editor [type="submit"]').click();
   await page.waitForFunction(()=>!studio.inspector);
@@ -75,6 +76,38 @@ try{
   assert.match(await page.locator('#graph-count').innerText(),/hidden by this view/);
   await page.locator('[data-network="all"]').click();
  });
+ await check('research journal saves results while another view is open and retains them after reload',async()=>{
+  await page.evaluate(async()=>{
+   await deskReady;await bootDesk();
+   const source=data.files.find(f=>f.text&&!f.research);
+   Object.assign(deskState(),{goal:'Compare the interview evidence',model:'audit-model',sources:[source.id],dailyLimit:12,enabled:true,organize:true});deskSession=deskKey();
+   localModelRequest=async()=>({output:'The source describes a research need. Review the original passage before accepting this conclusion.'});
+   const job=await deskEnqueue(deskState().goal,[source.id]);
+   page='Models';render();await deskRun(job);
+   window.auditJobId=job.id;
+  });
+  assert.equal(await page.evaluate(()=>deskState().jobs.at(-1).status),'needs_review');
+  assert.ok(await page.evaluate(()=>data.files.some(f=>f.research?.journalJob===window.auditJobId)));
+  await page.reload();await page.waitForSelector('.knowledge-node');
+  await page.evaluate(async()=>{await bootDesk();page='Research';render();});
+  assert.equal(await page.evaluate(()=>deskState().enabled),false);
+  assert.match(await page.locator('#desk-live').innerText(),/needs review/);
+  await page.screenshot({path:out+'/research-desk.png'});
+  await page.locator('[data-desk-review]').first().click();await page.waitForSelector('#claim-review');
+  await page.screenshot({path:out+'/claim-review.png'});
+  await page.locator('#dialog [data-act="close"]').click();
+ });
+ await check('interrupted research resumes only unfinished passes',async()=>{
+  await page.evaluate(async()=>{
+   token='test-only';const j=deskState();j.enabled=true;deskSession=deskKey();
+   const job=await deskEnqueue('Check the interview scope',j.sources);let calls=0;
+   localModelRequest=async()=>{calls++;if(calls===2)throw Error('Test disconnect');return {output:'Saved evidence pass'};};
+   await deskRun(job);if(job.steps.length!==1||job.status!=='blocked')throw Error('Checkpoint was not retained');
+   localModelRequest=async()=>{calls++;return {output:'Resumed analysis'};};job.status='queued';j.enabled=true;await deskRun(job);
+   if(calls!==4||job.status!=='needs_review')throw Error('Completed passes were repeated');
+   j.enabled=false;page='Overview';render();await save();
+  });
+ });
  for(const theme of ['porcelain','graphite','midnight','ember','forest']){
   await page.evaluate(theme=>{appearance().theme=theme;appearance().headings='sans';appearance().depth='off';appearance().grid=true;render();},theme);
   await check(theme+' respects independent grid and heading settings',async()=>{
@@ -88,12 +121,14 @@ try{
  await page.evaluate(()=>{appearance().theme='porcelain';render();});
  for(const width of [1024,768,390]){
   await page.setViewportSize({width,height:900});
+  await page.evaluate(()=>render());
   await check(width+'px navigation remains reachable',async()=>{
    await page.locator('[data-navigate]').click();
    await page.locator('#dialog [data-destination="review"]').click();
    assert.equal(await page.locator('.review-queue').isVisible(),true);
    await page.locator('#dialog [data-act="close"]').click();
   });
+  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Page must not overflow horizontally');
   await page.screenshot({path:out+'/graph-'+width+'.png'});
  }
  assert.deepEqual(errors,[]);

@@ -1,4 +1,30 @@
 'use strict';
+function researchStateLabel(node){
+ return ({pending:'Needs review',evidence:'Excerpt',supported:'Reviewed claim',unresolved:'Needs evidence',rejected:'Rejected',superseded:'Superseded'})[node.research?.state]||'Research record';
+}
+function researchReviewItems(){
+ const files=workspaceSourceFiles(),map=new Map(files.map(file=>[file.id,file]));
+ return files.filter(file=>file.research).map(file=>({file,label:researchStateLabel(file),
+  stale:['supported','evidence'].includes(file.research.state)&&!researchSourceReady(file,map)}));
+}
+function reviewQueueDialog(filter='attention'){
+ const items=researchReviewItems();
+ const visible=items.filter(({file,stale})=>filter==='all'||stale||['pending','unresolved'].includes(file.research.state));
+ modal('Research to review','<p>Review drafts, resolve missing evidence, and revisit records whose sources changed. A reviewed claim records your decision; it is not independent verification.</p>'+
+  '<div class="review-filters"><button data-review-filter="attention" aria-pressed="'+(filter==='attention')+'">Needs attention</button><button data-review-filter="all" aria-pressed="'+(filter==='all')+'">All research</button></div>'+
+  '<div class="review-queue">'+(visible.length?visible.map(({file,label,stale})=>'<article><div><small>'+esc(stale?'Source changed or unavailable':label)+'</small><h3>'+esc(file.name)+'</h3><p>'+esc((file.research.statement||file.text||'').slice(0,180))+'</p></div><button data-review-open="'+esc(file.id)+'">'+(file.research.state==='pending'?'Review claims':'Open record')+'</button></article>').join(''):'<p>No research records need attention in this workspace.</p>')+'</div>');
+}
+document.addEventListener('click',event=>{
+ const button=event.target.closest('[data-review-filter],[data-review-open]');if(!button)return;
+ if(button.dataset.reviewFilter)return reviewQueueDialog(button.dataset.reviewFilter);
+ (async()=>{
+  if(!await saveEditor())return;
+  const file=workspaceSourceFiles().find(file=>file.id===button.dataset.reviewOpen);if(!file)return;
+  if(file.research?.state==='pending')return reviewResearchDraft(file);
+  $('#dialog').close();
+  await studioCommand('focus',file.id);
+ })().catch(report);
+});
 let companionOpen=false;
 function companionState(){return data.companion??={enabled:true,suggestions:[],dismissed:[]}}
 function researchFingerprint(){return 'v2|'+data.files.map(f=>f.id+':'+(f.text||'')).join('|')}

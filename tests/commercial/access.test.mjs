@@ -8,7 +8,8 @@ test('commercial isolation, seats, replay, revisions and lifecycle',async()=>{
  try{
  await db.exec('create schema auth; create table auth.users(id uuid primary key,email text,email_confirmed_at timestamptz); create role anon; create role authenticated; create role service_role;');
  const dir=new URL('../../supabase/migrations/',import.meta.url);
- for(const f of (await readdir(dir)).filter(f=>f.endsWith('.sql')).sort())await db.exec(await readFile(new URL(f,dir),'utf8'));
+ // The mail schedule uses Supabase's pg_cron and pg_net extensions; PGlite tests the domain schema only.
+ for(const f of (await readdir(dir)).filter(f=>f.endsWith('.sql')&&!f.includes('mail_schedule')).sort())await db.exec(await readFile(new URL(f,dir),'utf8'));
  const owner=randomUUID(),member=randomUUID(),outsider=randomUUID();
  for(const [id,email] of [[owner,'owner@example.test'],[member,'member@example.test'],[outsider,'outsider@example.test']])await db.query('insert into auth.users values($1,$2,now())',[id,email]);
  const cmd=async(user,action,body={})=>(await db.query('select public.agenetic_command($1,$2,$3) result',[user,action,{request_id:randomUUID(),...body}])).rows[0].result;

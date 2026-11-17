@@ -155,11 +155,11 @@ try{
   });
   await page.locator('[data-brief-propose]').click();await page.waitForSelector('.brief-proposal');
   assert.match(await page.locator('.brief-diff').innerText(),/My own careful research notes/);
-  await page.locator('[data-brief-apply]').click();await page.waitForFunction(()=>!deskState().project.proposal);
+  await page.locator('[data-brief-apply]').click();await page.waitForFunction(()=>!document.querySelector('.brief-proposal')&&document.querySelector('#project-brief textarea').value.includes('configured research workflow')); 
   assert.match(await page.locator('#project-brief textarea').inputValue(),/configured research workflow/);
   await page.evaluate(()=>{data.files.find(f=>f.id===deskState().sources[0]).text+=' New conflicting information.';render();});
   assert.match(await page.locator('.project-warning').innerText(),/evidence changed/);
-  await page.locator('[data-brief-undo]').click();await page.waitForFunction(()=>deskState().project.brief.text==='My own careful research notes.');
+  await page.locator('[data-brief-undo]').click();await page.waitForFunction(()=>document.querySelector('#project-brief textarea').value==='My own careful research notes.');
   await page.setViewportSize({width:390,height:900});
   await page.locator('.project-tabs [data-project-tab="sources"]').click();
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));

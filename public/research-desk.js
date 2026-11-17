@@ -1,7 +1,7 @@
 'use strict';
 // A persistent workspace journal; navigation never owns execution.
 let deskModule,deskBusy=false,deskTickBusy=false,deskSession='',deskRequest='',deskStop=false,deskBooted=new Set();
-let projectModule,deskIndex,deskHistoryPage=0;
+let projectModule,deskIndex,deskHistoryPage=0,projectActionBusy=false;
 const deskReady=Promise.all([import('./research-journal.mjs'),import('./research-project.mjs')]).then(([journal,project])=>{deskModule=journal;projectModule=project;deskIndex=project.createPassageIndex();});
 function deskState(){const s=activeSpace();return s.researchDesk??=(deskModule?deskModule.newJournal():{version:1,goal:'',model:'',sources:[],performance:'quick',intervalMinutes:15,dailyLimit:12,autoFollowups:false,organize:true,archiveDuplicates:false,enabled:false,jobs:[],events:[],seen:{},lastScan:0});}
 function deskKey(){return data.profile.id+':'+activeSpace().id;}
@@ -195,8 +195,8 @@ document.addEventListener('submit',event=>{
  if(event.target.id!=='project-brief')return;event.preventDefault();projectLeave().then(()=>{event.target.querySelector('[role=status]').textContent='Brief saved on this device.';}).catch(error=>{event.target.querySelector('[role=status]').textContent=error.message;});
 });
 document.addEventListener('click',event=>{
- const button=event.target.closest('[data-project-tab],[data-history-page],[data-brief-propose],[data-brief-apply],[data-brief-discard],[data-brief-undo],[data-draft-finish],[data-project-source]');if(!button)return;
- button.disabled=true;(async()=>{
+ const button=event.target.closest('[data-project-tab],[data-history-page],[data-brief-propose],[data-brief-apply],[data-brief-discard],[data-brief-undo],[data-draft-finish],[data-project-source]');if(!button||projectActionBusy)return;
+ projectActionBusy=true;button.disabled=true;(async()=>{
   await deskReady;await projectLeave();const p=projectModule.ensureProject(deskState());
   if(button.dataset.projectSource){page='Overview';render();await openNetworkNode(button.dataset.projectSource);return;}
   if(button.dataset.draftFinish){const id=button.dataset.draftFinish;if(!data.files.some(f=>f.research?.draft===id))throw Error('Review at least one claim first.');await change(()=>{const draft=data.files.find(f=>f.id===id);draft.research.state='reviewed';const job=deskState().jobs.find(x=>x.output===id);if(job)job.status='completed';});}
@@ -207,7 +207,7 @@ document.addEventListener('click',event=>{
   if(button.hasAttribute('data-brief-discard'))await projectSaveEdit(()=>delete p.proposal);
   if(button.hasAttribute('data-brief-undo')&&p.brief.versions.length)await projectSaveEdit(()=>{const previous=p.brief.versions.pop();p.brief.text=previous.text;p.brief.citations=previous.citations;delete p.proposal;});
   renderDesk();document.querySelector('[data-project-tab][aria-current=page]')?.focus({preventScroll:true});
- })().catch(error=>toast(error.message)).finally(()=>button.disabled=false);
+ })().catch(error=>toast(error.message)).finally(()=>{button.disabled=false;projectActionBusy=false;});
 });
 
 document.addEventListener('input',event=>{if(event.target.closest('#desk-setup'))$('#desk-setup').dataset.dirty='true';});

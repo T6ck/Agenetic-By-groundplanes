@@ -151,6 +151,7 @@ try{
    await page.locator('#dialog [data-act="close"]').click();
   });
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Page must not overflow horizontally');
+  if(width===390){const add=await page.locator('.network-add').boundingBox(),header=await page.locator('.family-header').boundingBox();assert.ok(add.y>=header.y+header.height,'Add controls must sit below navigation');}
   await page.screenshot({path:out+'/graph-'+width+'.png'});
  }
  assert.deepEqual(errors,[]);

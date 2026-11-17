@@ -103,3 +103,5 @@ html body.mindspace #content .community-shell.compose-open{grid-template-columns
 .desk-columns>aside{background:transparent}
 .claim-review-dialog{box-shadow:0 8px 28px rgb(0 0 0 / .12)}
 .claim-review-dialog>.pad>.output{font-family:'Instrument Sans',Arial,sans-serif}
+
+@media(max-width:600px){html body.mindspace #content .network-add{position:fixed!important;top:78px!important;right:12px!important;left:auto!important;padding:4px!important;z-index:21}.network-context{top:72px!important}}

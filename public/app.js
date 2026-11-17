@@ -357,7 +357,7 @@ function selectContext(agent, task, requireMatch = false){
  if (!ids.size) return {text: '', sources: []};
  const ignored = new Set(['the','and','for','from','with','that','this','what','which','review','research','write','find','summarize','compare','data','document','information','task']);
  const terms = new Set((task.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) || []).filter(term => !ignored.has(term)).slice(0, 64));
- const best = [];
+ const best = [], bestByFile = new Map();
  let remaining = 1024 * 1024;
  for (const file of data.files) {
   if (!ids.has(file.id) || !file.text) continue;
@@ -368,18 +368,22 @@ function selectContext(agent, task, requireMatch = false){
    let score = 0;
    for (const term of terms) if (words.has(term)) score++;
    if (requireMatch && score === 0) continue;
+   const candidate = {id: file.id, name: file.name, excerpt, score};
+   if (score > (bestByFile.get(file.id)?.score || 0)) bestByFile.set(file.id, candidate);
    if (best.length === 4 && score <= best[3].score) continue;
-   best.push({id: file.id, name: file.name, excerpt, score});
+   best.push(candidate);
    best.sort((left, right) => right.score - left.score);
    if (best.length > 4) best.pop();
   }
   remaining -= limit;
   if (!remaining) break;
  }
+ const distinct = [...bestByFile.values()].sort((left,right)=>right.score-left.score).slice(0,4);
+ const chosen = [...new Set([...distinct, ...best])].slice(0,4);
  return {
-  text: best.map(file => 'File: ' + file.name + '\n' + file.excerpt).join('\n\n'),
-  sources: [...new Set(best.map(file => file.id))],
-  quotes: best
+  text: chosen.map(file => 'File: ' + file.name + '\n' + file.excerpt).join('\n\n'),
+  sources: [...new Set(chosen.map(file => file.id))],
+  quotes: chosen
  };
 }
 function chooseContext(agent, task){return selectContext(agent, task).text}

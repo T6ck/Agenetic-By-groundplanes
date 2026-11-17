@@ -33,3 +33,22 @@ test('Azure updater trusts the exact timestamped profile across leaf certificate
  assert.ok(await verify({...valid, timestamped:false}));
  assert.ok(await verify({...valid, status:'NotTrusted'}));
 });
+
+test('a manual update check joins startup and installation waits for a downloaded update', async () => {
+ const updater=new EventEmitter();
+ let finish, checks=0, installs=0;
+ updater.checkForUpdates=()=>{checks++;return new Promise(resolve=>{finish=resolve});};
+ updater.quitAndInstall=()=>{installs++;};
+ const controls=configureUpdates(updater,{signed:true,signerThumbprints:[pin]},{packaged:true,platform:'win32',setTimer:()=>({unref(){}})});
+ const manual=controls.check();
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(checks,1);
+ assert.equal(controls.install(),false);
+ updater.emit('update-downloaded');
+ finish();
+ assert.equal((await manual).ready,true);
+ assert.equal((await controls.check()).ready,true);
+ assert.equal(checks,1);
+ assert.equal(controls.install(),true);
+ assert.equal(installs,1);
+});

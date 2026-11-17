@@ -94,7 +94,10 @@ app.whenReady().then(async()=>{
  let release={};try{release=JSON.parse(fs.readFileSync(releasePath,'utf8').replace(/^\uFEFF/,''))}catch{}
  const updates=require('./updates.cjs').configureUpdates(require('electron-updater').autoUpdater,release,{packaged:app.isPackaged,platform:process.platform});
  app.on('before-quit',()=>updates.stop());
- ipcMain.handle('app:update',async event=>{verify(event);return {...await updates.check(), version:app.getVersion(), channel:release.signed?(release.channel||'stable'):'manual preview'}});
+ const releaseInfo={version:app.getVersion(),channel:release.development?'development':release.signed?(release.channel||'stable'):'manual preview'};
+ ipcMain.handle('app:release',event=>{verify(event);return releaseInfo;});
+ ipcMain.handle('app:update',async event=>{verify(event);return {...await updates.check(),...releaseInfo};});
+ ipcMain.handle('app:install-update',event=>{verify(event);return updates.install()?{}:{message:'Check for updates and wait for the download first.'};});
  window=new BrowserWindow({width:1440,height:960,minWidth:760,minHeight:640,title:'Agenetic by Groundplanes',backgroundColor:'#f4f7f6',webPreferences:{preload:path.join(__dirname,'preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true,webSecurity:true}});window.removeMenu();window.webContents.on('will-navigate',(event,url)=>{if(!isLocal(url)){event.preventDefault();const safe=externalURL(url);if(safe)shell.openExternal(safe)}});window.webContents.setWindowOpenHandler(({url})=>{const safe=externalURL(url);if(safe)shell.openExternal(safe);return {action:'deny'}});startCompanion();await window.loadURL(ORIGIN+'/');
 });
 app.on('before-quit',()=>{closing=true;child?.kill()});app.on('window-all-closed',()=>app.quit());

@@ -32,7 +32,7 @@ function verifyInstaller(file,thumbprints,run=execFile,profileEku=''){
  });
 }
 function configureUpdates(updater,release,{packaged,platform,setTimer=setInterval}={}){
- if(!packaged||platform!=='win32'||!release?.signed||release.development||!(release.signingProfileEku||release.signerThumbprints?.length))return {check:async()=>({message:'Automatic updates require a signed Windows release.'}),stop(){}};
+ if(!packaged||platform!=='win32'||!release?.signed||release.development||!(release.signingProfileEku||release.signerThumbprints?.length))return {check:async()=>({message:'Automatic updates require a signed Windows release.'}),install:()=>false,stop(){}};
  const beta = release.channel === 'beta';
  if (beta) updater.channel = 'beta';
  updater.allowPrerelease = beta;
@@ -44,14 +44,22 @@ function configureUpdates(updater,release,{packaged,platform,setTimer=setInterva
  updater.verifyUpdateCodeSignature=(_names,file)=>verifyInstaller(file,release.signerThumbprints,undefined,release.signingProfileEku);
  // Pinned electron-updater 6 otherwise skips verification when publisherName is missing.
  updater.verifySignature=file=>verifyInstaller(file,release.signerThumbprints,undefined,release.signingProfileEku);
- let busy=false,status='Automatic updates enabled.';
+ let pending, ready=false, status='Automatic updates enabled.';
  updater.on('checking-for-update',()=>{status='Checking GitHub for updates…';});
  updater.on('update-not-available',()=>{status='Agenetic is up to date.';});
  updater.on('update-available',info=>{status='Downloading Agenetic '+info.version+'…';});
  updater.on('error',()=>{status='Update unavailable. Your current version is unchanged.'});
- updater.on('update-downloaded',()=>{status='Update ready. It will install when you close Agenetic.'});
- async function check(){if(busy)return {message:status};busy=true;try{await updater.checkForUpdates()}catch{status='Update unavailable. Your current version is unchanged.'}finally{busy=false}return {message:status}}
+ updater.on('update-downloaded',()=>{ready=true;status='Update ready. It will install when you close Agenetic.'});
+ async function check(){
+  if (!pending && !ready) {
+   pending = Promise.resolve().then(()=>updater.checkForUpdates()).catch(()=>{
+    status='Update unavailable. Your current version is unchanged.';
+   }).finally(()=>{pending=null;});
+  }
+  await pending;
+  return {message:status,ready};
+ }
  const timer=setTimer(()=>void check(),60*60*1000);timer.unref?.();void check();
- return {check,stop(){clearInterval(timer)}};
+ return {check,install(){if(!ready)return false;updater.quitAndInstall();return true;},stop(){clearInterval(timer)}};
 }
 module.exports={verifyInstaller,configureUpdates};

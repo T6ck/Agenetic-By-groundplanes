@@ -17,9 +17,10 @@ async function installPackage(p,post){p=await readPackage(p);if(!await confirmRe
 function installedAdditions(){modal('Installed additions','<button data-mcp-open>Open MCP tools</button><p>Imported into this profile. Package updates are never applied silently.</p>'+((data.additions||[]).map(p=>'<article class="exchange-item"><div><small>'+esc(p.kind)+' · '+esc(p.version)+'</small><h3>'+esc(p.name)+'</h3><p>'+esc(p.author)+'</p></div></article>').join('')||'<p>No additions installed.</p>')+'<h3>MCP presets</h3>'+((data.mcpPresets||[]).map(p=>'<p>'+esc(p.name)+' · Disconnected<br><code>'+esc(p.endpoint)+'</code></p>').join('')||'<p>No saved endpoints.</p>'))}
 function desktopStatus(){
  modal('Agenetic releases','<section class="desktop-status"><p>The Windows x64 beta includes the app and local CPU runtime.</p>'+
+  (window.ageneticDesktop?'<p id="installed-release">'+esc(desktopRelease?'Version '+desktopRelease.version+' · '+desktopRelease.channel:'Reading installed version…')+'</p>':'')+
   '<div class="actions"><a href="https://github.com/T6ck/Agenetic-By-groundplanes/releases" target="_blank" rel="noopener noreferrer">Downloads and release notes</a>'+
   '<a href="https://github.com/T6ck/Agenetic-By-groundplanes/issues/new/choose" target="_blank" rel="noopener noreferrer">Report a beta issue</a>'+
-  (window.ageneticDesktop?'<button type="button" data-desktop-update>Check for updates</button>':'')+
+  (window.ageneticDesktop?'<button type="button" data-desktop-update>Check for updates</button>'+(window.ageneticDesktop.installUpdate?'<button type="button" data-desktop-install hidden>Quit and install update</button>':''):'')+
   '</div>'+(window.ageneticDesktop?'<p id="release-status" role="status"></p>':'')+'<p>Signed builds download updates and install when you close Agenetic. Unsigned previews use the installer from Releases.</p>'+
   '<p>Need help? Email hello@groundplanes.com.</p></section>');
 }

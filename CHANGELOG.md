@@ -4,6 +4,10 @@ For installers, checksums, and notes by build, see [GitHub Releases](https://git
 
 ## 0.2.17
 
+- Show the installed version from the workspace and show the release channel before you check for updates. Apply a downloaded update from the Releases panel.
+- Share one check between startup and manual requests, and keep a downloaded update ready until it is installed.
+- Prioritize relevant excerpts from different sources so one long document cannot crowd out other evidence.
+
 - Save graph edits and reviewed claims without reopening the editor. Close Companion with Escape or its close button.
 - Rework the Groundplane and Graphite palettes and use direct labels for appearance and research controls.
 - Keep evidence and critique together for synthesis, with prompts that ask for concrete findings, citations, and a specific next check.

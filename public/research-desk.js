@@ -39,6 +39,7 @@ async function deskEnqueue(question,ids,parent='',depth=0){
  const id=crypto.randomUUID(),task=crypto.randomUUID();
  const job=deskModule.queueJob(j,{id,question,sources:valid,revision,quotes,context:preflight.context,parent,depth,task});
  if(!job)return null;
+ const project=projectModule.ensureProject(j);job.project={audience:project.audience,deliverable:project.deliverable,completion:project.completion};
  data.tasks.push({id:task,name:question.slice(0,120),description:question,agent:'',status:'planned',sources:valid,researchJob:id});activeSpace().members.push(task);
  for(const from of valid)data.links.push({from,to:task,type:'supplies-context'});
  if(j.organize)deskModule.placeGenerated(activeSpace(),task,valid[0]);
@@ -80,7 +81,7 @@ async function deskRun(job){
    if(deskStop||!j.enabled||deskKey()!==key)break;
    if(await deskRevision(job.sources)!==job.revision)throw Error('Sources changed during this run. Completed passes are retained; queue a fresh comparison.');
    const index=job.steps.length,stage=deskModule.STAGES[index];deskEvent(stage+': '+job.question);await save();deskRefresh();
-   const result=await localModelRequest({model:model.name,model_id:model.companionId||null,model_source:model.source||null,role:'Research reviewer',profile:job.performance,task:job.question,instructions:instructions[index],context:compactCycleContext(job.context,job.steps)},{label:stage+': '+job.question,sources:job.sources,onRequest:id=>deskRequest=id});
+   const result=await localModelRequest({model:model.name,model_id:model.companionId||null,model_source:model.source||null,role:'Research reviewer',profile:job.performance,task:job.question,instructions:instructions[index]+'\nRequested deliverable: '+(job.project?.deliverable||'Research brief')+'\nAudience: '+(job.project?.audience||'Researcher')+'\nUser completion criteria (report gaps; do not claim these are satisfied without evidence): '+(job.project?.completion||'Answer the question with supported observations and remaining gaps.'),context:compactCycleContext(job.context,job.steps)},{label:stage+': '+job.question,sources:job.sources,onRequest:id=>deskRequest=id});
    if(data!==record||deskKey()!==key)throw Error('Workspace changed while research was running.');
    deskModule.checkpoint(job,stage,result.output);await save();deskRefresh();
   }
@@ -133,7 +134,7 @@ document.addEventListener('submit',e=>{
 document.addEventListener('click',event=>{
  const b=event.target.closest('[data-open-research],[data-desk-start],[data-desk-pause],[data-desk-stop],[data-desk-scan],[data-desk-retry],[data-desk-cancel],[data-desk-review],[data-desk-restore]');if(!b)return;
  (async()=>{
-  if(b.hasAttribute('data-open-research')){if(!await saveEditor())return;page='Research';render();return;}
+  if(b.hasAttribute('data-open-research')){await projectLeave();if(!await saveEditor())return;page='Research';render();return;}
   await bootDesk();const j=deskState();
   if(b.hasAttribute('data-desk-start')){if(!j.goal||!j.model||!j.sources.length)throw Error('Save research setup first.');if(!token)throw Error('Connect a local model first.');j.enabled=true;deskSession=deskKey();deskStop=false;await save();await deskScan(true);deskTick().catch(report);}
   if(b.hasAttribute('data-desk-pause')||b.hasAttribute('data-desk-stop')){j.enabled=false;if(b.hasAttribute('data-desk-stop')){deskStop=true;if(deskRequest)try{await companionCall('/cancel',{request_id:deskRequest});}catch{toast('Cancellation requested. Waiting for the current model request to finish.');}}deskEvent('Research paused.');await save();}
@@ -157,7 +158,7 @@ function deskPreflight(){
 function deskSourcesView(){
  const result=deskPreflight();
  return '<div class="project-section-heading"><div><h2>What this run will read</h2><p>One passage per selected source. These are the exact excerpts prepared for the next run.</p></div><button data-project-tab="plan">Change selection</button></div>'+
- (!result.sources.length?'<p class="desk-empty">Choose sources in Plan. Nothing is sent until you start research.</p>':result.sources.map(source=>{const q=result.quotes.find(q=>q.id===source.id);return '<article class="project-source"><div><h3>'+esc(source.name)+'</h3><small>'+esc(source.id)+'</small></div><p class="state-tag">'+(!source.readable?'No readable text · extract text or attach a readable copy':source.partial?'Partial coverage':'Text scanned')+'</p><p>'+source.scanned.toLocaleString()+' / '+source.total.toLocaleString()+' characters scanned'+(q?' · excerpt '+(q.start+1)+'–'+q.end:'')+'</p>'+(q?'<blockquote>'+esc(q.excerpt)+'</blockquote><p>'+(!q.matched?'No question keywords matched. This opening passage may not answer your question.':'Selected by question keywords; relevance still needs review.')+'</p>':'')+'</article>';}).join(''));
+ (!result.sources.length?'<p class="desk-empty">Choose sources in Plan. Nothing is sent until you start research.</p>':result.sources.map(source=>{const q=result.quotes.find(q=>q.id===source.id);return '<article class="project-source"><div><h3>'+esc(source.name)+'</h3><button data-project-source="'+esc(source.id)+'">Open source</button></div><p class="state-tag">'+(!source.readable?'No readable text · extract text or attach a readable copy':source.partial?'Partial coverage':'Text scanned')+'</p><p>'+source.scanned.toLocaleString()+' / '+source.total.toLocaleString()+' characters scanned'+(q?' · excerpt '+(q.start+1)+'–'+q.end:'')+'</p>'+(q?'<blockquote>'+esc(q.excerpt)+'</blockquote><p>'+(!q.matched?'No question keywords matched. This opening passage may not answer your question.':'Selected by question keywords; relevance still needs review.')+'</p>':'')+'</article>';}).join(''));
 }
 function deskReviewView(){
  const files=workspaceSourceFiles(),drafts=files.filter(f=>f.research?.state==='pending'&&!f.research.archived),claims=files.filter(f=>f.research?.draft);
@@ -194,9 +195,10 @@ document.addEventListener('submit',event=>{
  if(event.target.id!=='project-brief')return;event.preventDefault();projectLeave().then(()=>{event.target.querySelector('[role=status]').textContent='Brief saved on this device.';}).catch(error=>{event.target.querySelector('[role=status]').textContent=error.message;});
 });
 document.addEventListener('click',event=>{
- const button=event.target.closest('[data-project-tab],[data-history-page],[data-brief-propose],[data-brief-apply],[data-brief-discard],[data-brief-undo],[data-draft-finish]');if(!button)return;
+ const button=event.target.closest('[data-project-tab],[data-history-page],[data-brief-propose],[data-brief-apply],[data-brief-discard],[data-brief-undo],[data-draft-finish],[data-project-source]');if(!button)return;
  button.disabled=true;(async()=>{
   await deskReady;await projectLeave();const p=projectModule.ensureProject(deskState());
+  if(button.dataset.projectSource){page='Overview';render();await openNetworkNode(button.dataset.projectSource);return;}
   if(button.dataset.draftFinish){const id=button.dataset.draftFinish;if(!data.files.some(f=>f.research?.draft===id))throw Error('Review at least one claim first.');await change(()=>{const draft=data.files.find(f=>f.id===id);draft.research.state='reviewed';const job=deskState().jobs.find(x=>x.output===id);if(job)job.status='completed';});}
   if(button.dataset.projectTab)await projectSaveEdit(()=>p.tab=button.dataset.projectTab);
   if(button.dataset.historyPage!==undefined)deskHistoryPage=Number(button.dataset.historyPage);

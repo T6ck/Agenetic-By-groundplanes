@@ -147,6 +147,26 @@ try{
   await page.screenshot({path:out+'/project-brief.png'});
   await page.evaluate(()=>{page='Overview';render();});
  });
+ await check('reviewed briefs require approval, keep versions, and flag changed source revisions',async()=>{
+  await page.evaluate(()=>{
+   const source=data.files.find(f=>f.id===deskState().sources[0]);
+   const claim=appendResearchNode({name:'Reviewed observation',text:'A limited observation with evidence.',state:'supported',statement:'The project uses a configured research workflow.',sources:[source.id],quotes:[{id:source.id,excerpt:source.text.slice(0,80)}]});
+   window.projectClaim=claim.id;page='Research';deskState().project.tab='brief';render();
+  });
+  await page.locator('[data-brief-propose]').click();await page.waitForSelector('.brief-proposal');
+  assert.match(await page.locator('.brief-diff').innerText(),/My own careful research notes/);
+  await page.locator('[data-brief-apply]').click();await page.waitForFunction(()=>!deskState().project.proposal);
+  assert.match(await page.locator('#project-brief textarea').inputValue(),/configured research workflow/);
+  await page.evaluate(()=>{data.files.find(f=>f.id===deskState().sources[0]).text+=' New conflicting information.';render();});
+  assert.match(await page.locator('.project-warning').innerText(),/evidence changed/);
+  await page.locator('[data-brief-undo]').click();await page.waitForFunction(()=>deskState().project.brief.text==='My own careful research notes.');
+  await page.setViewportSize({width:390,height:900});
+  await page.locator('.project-tabs [data-project-tab="sources"]').click();
+  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+  await page.screenshot({path:out+'/project-mobile.png'});
+  await page.locator('[data-project-source]').first().click();await page.waitForSelector('#space-inspector:not([hidden])');
+  await page.setViewportSize({width:1440,height:1000});await page.evaluate(()=>{studio.inspector=false;page='Overview';render();});
+ });
  for(const theme of ['porcelain','graphite','midnight','ember','forest']){
   await page.evaluate(theme=>{appearance().theme=theme;appearance().headings='sans';appearance().depth='off';appearance().grid=true;render();},theme);
   await check(theme+' respects independent grid and heading settings',async()=>{

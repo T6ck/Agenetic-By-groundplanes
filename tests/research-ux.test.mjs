@@ -46,3 +46,15 @@ test('review queue classifies pending and changed evidence without altering reco
  assert.equal(items[1].stale,true);assert.equal(items[2].stale,false);
  assert.equal(files[1].research.state,'evidence');
 });
+test('an individual evidence run preserves its workflow step for downstream handoffs',async()=>{
+ const step={id:'step',agent:'agent'},agent={id:'agent'},data={tasks:[step]};
+ const status={},output={},submit={};let savedStep;
+ const scope={record:data,workspace:'space',files:['source']};
+ const run=runInNewContext(section('app.js','async function run(agent','async function act(')+'\nrun',{
+  data,running:false,window:{},activeSpace:()=>({id:'space'}),agentSourceScope:()=>scope,
+  selectContext:()=>({sources:['source']}),saveAgentEvidence:async(a,t,c,s,step)=>{savedStep=step;return {output:'Evidence'};}
+ });
+ const form={dataset:{step:'step'},elements:{mode:{value:'evidence'},follow:{checked:false}},
+  querySelector:selector=>selector==='#runProgress'?status:selector==='#runOutput'?output:submit};
+ await run(agent,'Find evidence',form);assert.equal(savedStep,step);assert.equal(output.textContent,'Evidence');
+});

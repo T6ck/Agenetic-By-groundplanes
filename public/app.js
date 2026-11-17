@@ -417,7 +417,7 @@ async function run(agent, task, form){
   running = true;
   submit.disabled = true;
   try {
-   const result = await saveAgentEvidence(agent, task, context, scope);
+   const result = await saveAgentEvidence(agent, task, context, scope, step);
    output.className = 'output';
    output.textContent = result.output;
    progress.textContent = result.reused ? 'Reused existing evidence.' : 'Exact excerpts saved to the research record.';

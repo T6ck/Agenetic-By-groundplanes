@@ -42,9 +42,9 @@ Deno.serve(async(req)=>{
   }
   if(['checkout','portal','invoices','seats'].includes(action)){
    const ctx=await command(uid,'billing_context',b);
-   const secret=Deno.env.get('AGENETIC_STRIPE_KEY');
+   const secret=(Deno.env.get('AGENETIC_STRIPE_KEY')||Deno.env.get('STRIPE_SECRET_KEY'));
    if(!secret)return json({error:'Team billing is not enabled yet. Personal use is unaffected.'},503,origin);
-   const stripe=new Stripe(secret,{apiVersion:'2026-10-28.endive',httpClient:Stripe.createFetchHttpClient()});
+   const stripe=new Stripe(secret,{httpClient:Stripe.createFetchHttpClient()});
    if(action==='invoices'){
     if(!ctx.customer_id)return json({invoices:[]},200,origin);
     const list=await stripe.invoices.list({customer:ctx.customer_id,limit:20,...(b.after?{starting_after:b.after}:{})});

@@ -5,9 +5,9 @@ const events=new Set(['checkout.session.completed','checkout.session.async_payme
 const id=(v:any)=>typeof v==='string'?v:v?.id;
 Deno.serve(async req=>{
  if(req.method!=='POST')return new Response('POST required',{status:405});
- const key=Deno.env.get('AGENETIC_STRIPE_KEY'),secret=Deno.env.get('AGENETIC_STRIPE_WEBHOOK_SECRET');
+ const key=(Deno.env.get('AGENETIC_STRIPE_KEY')||Deno.env.get('STRIPE_SECRET_KEY')),secret=Deno.env.get('AGENETIC_STRIPE_WEBHOOK_SECRET');
  if(!key||!secret)return new Response('Billing is not configured',{status:503});
- const stripe=new Stripe(key,{apiVersion:'2026-10-28.endive',httpClient:Stripe.createFetchHttpClient()});
+ const stripe=new Stripe(key,{httpClient:Stripe.createFetchHttpClient()});
  let event:Stripe.Event;
  try{const raw=await req.text();if(raw.length>1000000)return new Response('Too large',{status:413});event=await stripe.webhooks.constructEventAsync(raw,req.headers.get('stripe-signature')||'',secret,undefined,Stripe.createSubtleCryptoProvider());}catch{return new Response('Invalid signature',{status:400});}
  if(!events.has(event.type))return Response.json({ignored:true});

@@ -294,7 +294,7 @@ function applyNetworkCamera() {
   const world=$('.network-world');if(!world)return;
   const c=network.camera;world.setAttribute('transform','translate('+c.x+' '+c.y+') scale('+c.scale+')');
   $('#network-zoom').textContent=Math.round(c.scale*100)+'%';
-  $('.knowledge-svg').dataset.labels=network.labels!=='off'?'visible':'hidden';
+  $('.knowledge-svg').dataset.labels=network.labels;
   $('.network-edges').style.opacity=Math.min(.9,network.edgeOpacity*1.45);
   for(const label of document.querySelectorAll('.knowledge-node text'))label.style.fontSize=(12/c.scale)+'px';
   $('.network-stage').style.setProperty('--grid-x',(c.x*.12)+'px');$('.network-stage').style.setProperty('--grid-y',(c.y*.12)+'px');
@@ -320,9 +320,10 @@ function placeNetworkLabels() {
     };
     let selected=candidates[0],best=cost(selected);
     for(const candidate of candidates.slice(1)){const result=cost(candidate);if(result.hits<best.hits){selected=candidate;best=result}if(!best.hits)break}
-    text.setAttribute('x',selected.x);text.setAttribute('y',selected.y);occupied.push(best.box);
+    text.setAttribute('x',selected.x);text.setAttribute('y',selected.y);
+    if(!best.hits)occupied.push(best.box);
     const tether=group.querySelector('.node-tether');if(tether){const tx=selected.x<0?selected.x+width/2:selected.x-4/scale,ty=selected.y-4/scale,d=Math.hypot(tx,ty)||1;tether.setAttribute('x1',tx/d*(r+4));tether.setAttribute('y1',ty/d*(r+4));tether.setAttribute('x2',tx);tether.setAttribute('y2',ty)}
-    group.classList.remove('label-collision');
+    group.classList.toggle('label-collision',best.hits>0);
   }
 }
 function persistNetwork() {
@@ -440,7 +441,9 @@ async function networkAction(action,key) {
   }
   if(!await saveEditor())return;
   if(action==='graph'||action==='canvas') {
-    activeSpace().viewMode=action;network.needFit=action==='graph'&&!activeSpace().graphCamera;studio.inspector=false;studio.selected.clear();await save();render();return;
+    if(activeSpace().viewMode===action)return;
+    activeSpace().viewMode=action;network.needFit=action==='graph'&&!activeSpace().graphCamera;studio.inspector=false;studio.selected.clear();await save();
+    if(document.startViewTransition&&appearance().motion!==false&&!matchMedia('(prefers-reduced-motion: reduce)').matches)document.startViewTransition(()=>render());else render();return;
   }
   if(action==='appearance'){appearanceOpen=!appearanceOpen;network.settings=false;studio.inspector=false;render();return}
   if(action==='example')return openExampleSpace();

@@ -130,6 +130,23 @@ try{
    source.text=original;job.status='cancelled';await save();
   });
  });
+ await check('research sections preserve brief edits and show exact source preflight',async()=>{
+  await page.evaluate(()=>{page='Research';projectModule.ensureProject(deskState()).tab='plan';render();});
+  await page.locator('.project-tabs [data-project-tab="sources"]').click();
+  await page.waitForSelector('.project-source blockquote');
+  assert.match(await page.locator('.project-panel').innerText(),/characters scanned/);
+  await page.screenshot({path:out+'/project-sources.png'});
+  await page.locator('.project-tabs [data-project-tab="brief"]').click();
+  await page.locator('#project-brief textarea').fill('My own careful research notes.');
+  await page.locator('.project-tabs [data-project-tab="review"]').click();
+  await page.locator('.project-tabs [data-project-tab="brief"]').click();
+  assert.equal(await page.locator('#project-brief textarea').inputValue(),'My own careful research notes.');
+  await page.locator('[data-brief-propose]').click();
+  // With no supported claims, the user's writing remains intact.
+  assert.equal(await page.locator('#project-brief textarea').inputValue(),'My own careful research notes.');
+  await page.screenshot({path:out+'/project-brief.png'});
+  await page.evaluate(()=>{page='Overview';render();});
+ });
  for(const theme of ['porcelain','graphite','midnight','ember','forest']){
   await page.evaluate(theme=>{appearance().theme=theme;appearance().headings='sans';appearance().depth='off';appearance().grid=true;render();},theme);
   await check(theme+' respects independent grid and heading settings',async()=>{

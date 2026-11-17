@@ -5,13 +5,13 @@ export function recoverJournal(j){j.enabled=false;for(const job of j.jobs)if(job
 export function addEvent(j,message,now=Date.now()){j.events.unshift({time:now,message});j.events=j.events.slice(0,100);}
 export function queueJob(j,{id,question,sources,revision,context,quotes=[],parent='',depth=0,task},now=Date.now()){
  if(j.jobs.some(x=>x.revision===revision&&x.question===question&&x.status!=='cancelled'))return null;
- if(j.jobs.length>=200)throw Error('This journal has 200 tasks. Create a new workspace to continue with a fresh journal.');
+
  if(j.jobs.filter(x=>['queued','running','interrupted'].includes(x.status)).length>=20)throw Error('The queue has 20 unfinished tasks. Finish or cancel some before adding more.');
  const job={id,question,sources:[...sources],revision,context,quotes,parent,depth,task,status:'queued',steps:[],createdAt:now,model:j.model,performance:j.performance||'quick'};
  j.jobs.push(job);addEvent(j,'Queued: '+question,now);return job;
 }
 export function nextJob(j,now=Date.now()){
- if(!j.enabled)return null;
+ if(!j.enabled||j.jobs.filter(x=>x.status==='needs_review').length>=5)return null;
  const since=now-86400000;
  const started=j.jobs.filter(x=>x.startedAt>since).length;
  return j.jobs.find(x=>x.status==='queued'&&(x.startedAt||started<j.dailyLimit))||null;

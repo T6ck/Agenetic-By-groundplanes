@@ -8,6 +8,13 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 .knowledge-file-list button{min-height:36px}
 .network-context>span,.section-kicker{font-size:11px;letter-spacing:.08em}
 .network-context h1{font-size:30px}
+/* Cancel camera magnification around each node's own origin. Text and
+   leader lines keep stable pixel geometry between collision passes. */
+.knowledge-node text,.knowledge-node .node-tether{
+  transform-box:view-box;
+  transform-origin:0 0;
+  transform:scale(var(--label-scale,1));
+}
 .node-state-label{font-size:10px;fill:var(--ax-muted)}
 .knowledge-svg[data-detail=compact] .node-state-label{display:none}
 .knowledge-node text{paint-order:stroke;stroke:var(--ax-bg);stroke-width:4px;stroke-linejoin:round;fill:var(--ax-ink)}

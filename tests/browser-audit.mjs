@@ -32,13 +32,14 @@ try{
    const layer=svg.querySelector('.network-nodes');
    const original=layer.firstElementChild;
    const bounds=svg.getBoundingClientRect();
-   const x=bounds.width/2,y=bounds.height/2;
+   const clientX=Math.round(bounds.left+bounds.width/2),clientY=Math.round(bounds.top+bounds.height/2);
+   const x=clientX-bounds.left,y=clientY-bounds.top;
    const oldCamera={...network.camera}, added=[];
    const title=original.querySelector('text');
    const renderedSize=()=>parseFloat(getComputedStyle(title).fontSize)*title.getScreenCTM().a;
    const anchor=()=>[(x-network.camera.x)/network.camera.scale,(y-network.camera.y)/network.camera.scale];
    const wheel=(delta,mode)=>svg.dispatchEvent(new WheelEvent('wheel',{
-    bubbles:true,cancelable:true,clientX:bounds.left+x,clientY:bounds.top+y,deltaY:delta,deltaMode:mode
+    bubbles:true,cancelable:true,clientX,clientY,deltaY:delta,deltaMode:mode
    }));
    try{
     const fragment=document.createDocumentFragment();

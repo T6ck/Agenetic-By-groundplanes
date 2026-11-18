@@ -5,9 +5,22 @@ let projectModule,deskIndex,deskHistoryPage=0,projectActionBusy=false;
 const deskReady=Promise.all([import('./research-journal.mjs'),import('./research-project.mjs')]).then(([journal,project])=>{deskModule=journal;projectModule=project;deskIndex=project.createPassageIndex();});
 function deskState(){const s=activeSpace();return s.researchDesk??=(deskModule?deskModule.newJournal():{version:1,goal:'',model:'',sources:[],performance:'quick',intervalMinutes:15,dailyLimit:12,autoFollowups:false,organize:true,archiveDuplicates:false,enabled:false,jobs:[],events:[],seen:{},lastScan:0});}
 function deskKey(){return data.profile.id+':'+activeSpace().id;}
-async function bootDesk(){await deskReady;if(!data?.spaces)return;const key=deskKey();if(deskBooted.has(key))return;deskBooted.add(key);const j=deskState();deskModule.recoverJournal(j);projectModule.ensureProject(j);j.autoFollowups=false;await save();if(page==='Research')renderDesk();}
+async function bootDesk(){await deskReady;if(!data?.spaces)return;const key=deskKey();if(deskBooted.has(key))return;deskBooted.add(key);const j=deskState();deskModule.recoverJournal(j);deskModule.reconcileReviews(j,workspaceSourceFiles());projectModule.ensureProject(j);j.autoFollowups=false;await save();if(page==='Research')renderDesk();}
 async function deskRevision(ids){
- const text=JSON.stringify(ids.map(id=>{const f=data.files.find(f=>f.id===id);return [id,f?.name,f?.text??null,f?.research?.state??null];}));
+ const files=new Map(workspaceSourceFiles().map(f=>[f.id,f]));
+ const seen=new Set(),rows=[];
+ function visit(id){
+  if(seen.has(id))return;
+  seen.add(id);
+  const f=files.get(id);
+  rows.push([id,f?.name,f?.text??null,f?.research?.state??null]);
+  for(const quote of f?.research?.quotes||[]){
+   rows.push([id,quote.id,quote.revision||'',quote.excerpt,data.links.some(l=>l.from===quote.id&&l.to===id)]);
+   visit(quote.id);
+  }
+ }
+ ids.forEach(visit);
+ const text=JSON.stringify(rows);
  return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text)))).map(b=>b.toString(16).padStart(2,'0')).join('');
 }
 function deskEvent(text){deskModule.addEvent(deskState(),text);}
@@ -62,6 +75,8 @@ async function deskEnqueue(question,ids,parent='',depth=0){
  const id=crypto.randomUUID(),task=crypto.randomUUID();
  const job=deskModule.queueJob(j,{id,question,sources:valid,revision,quotes,context:preflight.context,parent,depth,task});
  if(!job)return null;
+ job.preparedEvidence=true;
+ if(parent){const origin=j.jobs.find(item=>item.id===parent);if(origin)origin.followup=job.id;}
  const project=projectModule.ensureProject(j);job.project={audience:project.audience,deliverable:project.deliverable,completion:project.completion};
  data.tasks.push({id:task,name:question.slice(0,120),description:question,agent:'',status:'planned',sources:valid,researchJob:id});activeSpace().members.push(task);
  for(const from of valid)data.links.push({from,to:task,type:'supplies-context'});
@@ -73,7 +88,8 @@ async function deskScan(force=false){
  if(!j.goal||!j.model||!j.sources.length)throw Error('Save a goal, a model and one to four sources first.');
  if(!force&&Date.now()-j.lastScan<j.intervalMinutes*60000)return;
  const revision=await deskRevision(j.sources);if(deskKey()!==key)return;
- if(j.seen[j.goal]!==revision){await deskEnqueue(j.goal,j.sources);j.seen[j.goal]=revision;}
+ const inputKey=JSON.stringify([revision,deskModule.setupKey(j)]);
+ if(j.seen[j.goal]!==inputKey){await deskEnqueue(j.goal,j.sources);j.seen[j.goal]=inputKey;}
  j.lastScan=Date.now();await save();deskRefresh();
 }
 async function deskArchiveDuplicates(){
@@ -85,6 +101,10 @@ async function deskArchiveDuplicates(){
   activeSpace().hidden??=[];if(!activeSpace().hidden.includes(pair.id))activeSpace().hidden.push(pair.id);
   deskEvent('Archived duplicate draft: '+file.name);
  }
+}
+async function checkDeskSources(job){
+ if(await deskRevision(job.sources)!==job.revision || selectedResearchSources(job.sources).length!==job.sources.length)
+  throw Error('Sources changed during this run. Queue a fresh comparison to use the current evidence.');
 }
 async function deskRun(job){
  if(deskBusy||running)throw Error('Another local run is still active. This task remains queued.');
@@ -102,26 +122,26 @@ async function deskRun(job){
   ];
   while(job.steps.length<3){
    if(deskStop||!j.enabled||deskKey()!==key)break;
-   if(await deskRevision(job.sources)!==job.revision)throw Error('Sources changed during this run. Completed passes are retained; queue a fresh comparison.');
+   await checkDeskSources(job);
    const index=job.steps.length,stage=deskModule.STAGES[index];deskEvent(stage+': '+job.question);await save();deskRefresh();
-   const result=await localModelRequest({model:model.name,model_id:model.companionId||null,model_source:model.source||null,role:'Research reviewer',profile:job.performance,task:job.question,instructions:instructions[index]+'\nRequested deliverable: '+(job.project?.deliverable||'Research brief')+'\nAudience: '+(job.project?.audience||'Researcher')+'\nUser completion criteria (report gaps; do not claim these are satisfied without evidence): '+(job.project?.completion||'Answer the question with supported observations and remaining gaps.'),context:compactCycleContext(job.context,job.steps)},{label:stage+': '+job.question,sources:job.sources,onRequest:id=>deskRequest=id});
+   const result=await localModelRequest({model:model.name,model_id:model.companionId||null,model_source:model.source||null,role:'Research reviewer',profile:job.performance,task:job.question,instructions:instructions[index]+'\nRequested deliverable: '+(job.project?.deliverable||'Research brief')+'\nAudience: '+(job.project?.audience||'Researcher')+'\nUser completion criteria (report gaps; do not claim these are satisfied without evidence): '+(job.project?.completion||'Answer the question with supported observations and remaining gaps.'),preserve_context:true,context:compactCycleContext(job.context,job.steps,job.preparedEvidence)},{label:stage+': '+job.question,sources:job.sources,onRequest:id=>deskRequest=id});
    if(data!==record||deskKey()!==key)throw Error('Workspace changed while research was running.');
+   await checkDeskSources(job);
    deskModule.checkpoint(job,stage,result.output);await save();deskRefresh();
   }
   if(job.steps.length===3&&!deskStop){
    // Output and checkpoint state are committed together; retry cannot create another output.
-   if(await deskRevision(job.sources)!==job.revision)throw Error('Sources changed before the result was saved. Start a fresh comparison.');
+   await checkDeskSources(job);
    if(!job.output){
     const node=appendResearchNode({name:'Draft · '+job.question,text:job.steps[2].output,state:'pending',sources:job.sources,step:job.task});
     node.research.journalJob=job.id;node.research.sourceRevision=job.revision;node.research.sourceSnapshots=job.quotes;job.output=node.id;
     if(j.organize)deskModule.placeGenerated(space,node.id,job.task);
    }
    job.status='needs_review';if(deskTask(job)){deskTask(job).status='complete';deskTask(job).output=job.steps[2].output;}
-   deskEvent('Draft saved for review: '+job.question);await deskArchiveDuplicates();await save();
+   deskEvent('Draft saved for review: '+job.question);await deskArchiveDuplicates();deskModule.reconcileReviews(j,workspaceSourceFiles());await save();
    try {const match=/^NEXT:\s*(.{12,240}\?)\s*$/mi.exec(job.steps[2].output);
    if(match&&job.depth<2&&!job.followup){
-    const child=await deskEnqueue(match[1],job.sources,job.id,job.depth+1);
-    if(child){child.status='proposed';job.followup=child.id;deskEvent('Follow-up '+('proposed')+': '+match[1]);await save();}
+    await deskEnqueue(match[1],job.sources,job.id,job.depth+1);
    }
    }catch(error){deskModule.addEvent(j,'Result saved. Follow-up was not queued: '+error.message);await save();}
   }else{job.status='interrupted';if(deskTask(job))deskTask(job).status='paused';deskEvent('Paused with '+job.steps.length+' completed passes.');await save();}
@@ -137,7 +157,7 @@ async function deskTick(){
   await bootDesk();const j=deskState();
   if(!j.enabled)return;
   if(deskSession!==deskKey()){j.enabled=false;await save();deskRefresh();return;}
-  try{await deskScan();if(deskBusy||running)return;const job=deskModule.nextJob(j);if(job)await deskRun(job);}
+  try{await deskScan();if(deskBusy||running)return;deskModule.reconcileReviews(j,workspaceSourceFiles());const job=deskModule.nextJob(j);if(job)await deskRun(job);}
   catch(error){j.enabled=false;deskEvent(error.message);await save();deskRefresh();}
  }finally{deskTickBusy=false;}
 }
@@ -162,10 +182,10 @@ document.addEventListener('click',event=>{
   if(b.hasAttribute('data-desk-start')){if(!j.goal||!j.model||!j.sources.length)throw Error('Save research setup first.');if(!token)throw Error('Connect a local model first.');j.enabled=true;deskSession=deskKey();deskStop=false;await save();await deskScan(true);deskTick().catch(report);}
   if(b.hasAttribute('data-desk-pause')||b.hasAttribute('data-desk-stop')){j.enabled=false;if(b.hasAttribute('data-desk-stop')){deskStop=true;if(deskRequest)try{await companionCall('/cancel',{request_id:deskRequest});}catch{toast('Cancellation requested. Waiting for the current model request to finish.');}}deskEvent('Research paused.');await save();}
   if(b.hasAttribute('data-desk-scan'))await deskScan(true);
-  if(b.dataset.deskRetry){const job=j.jobs.find(x=>x.id===b.dataset.deskRetry);if(!job||job.status==='running')return;if(await deskRevision(job.sources)!==job.revision){await deskEnqueue(job.question,job.sources,job.parent,job.depth);job.status='cancelled';}else{job.status='queued';job.error='';}await save();}
+  if(b.dataset.deskRetry){const job=j.jobs.find(x=>x.id===b.dataset.deskRetry);if(!job||job.status==='running')return;if(await deskRevision(job.sources)!==job.revision){await deskEnqueue(job.question,job.sources,job.parent,job.depth);job.status='cancelled';}else{if(job.parent)job.approvedAt=Date.now();job.status='queued';job.error='';}await save();}
   if(b.dataset.deskCancel){const job=j.jobs.find(x=>x.id===b.dataset.deskCancel);if(job&&job.status!=='running'){job.status='cancelled';if(deskTask(job))deskTask(job).status='cancelled';await save();}}
   if(b.dataset.deskReview){const f=data.files.find(x=>x.id===b.dataset.deskReview);if(f)reviewResearchDraft(f);}
-  if(b.dataset.deskRestore){const f=data.files.find(x=>x.id===b.dataset.deskRestore);if(f?.research){delete f.research.archived;f.research.noAutoArchive=true;activeSpace().hidden=(activeSpace().hidden||[]).filter(id=>id!==f.id);await save();}}
+  if(b.dataset.deskRestore){const f=data.files.find(x=>x.id===b.dataset.deskRestore);if(f?.research){delete f.research.archived;f.research.noAutoArchive=true;activeSpace().hidden=(activeSpace().hidden||[]).filter(id=>id!==f.id);deskModule.reconcileReviews(j,workspaceSourceFiles());await save();}}
   deskRefresh();
  })().catch(error=>toast(error.message));
 });

@@ -20,3 +20,14 @@ test('brief proposal preserves edits, validates current evidence and supports ve
 test('history pagination retains all jobs and new project metadata leaves existing journal intact',()=>{
  const j={jobs:Array.from({length:245},(_,id)=>({id}))};ensureProject(j);assert.equal(j.jobs.length,245);assert.equal(historyPage(j,0)[0].id,244);assert.equal(historyPage(j,12).length,5);assert.equal(historyPage(j,13).length,0);
 });
+test('each matching passage survives the exact research payload, including late hits',async()=>{
+ const {compactCycleContext}=await import('../public/research-cycle.mjs');
+ const files=Array.from({length:4},(_,i)=>({id:'s'+i,name:'Source '+i,text:'old observation. '.repeat(43)+'watershed'+i+' rises here. '+ 'more. '.repeat(90)}));
+ const selection=createPassageIndex().select(files,'watershed0 watershed1 watershed2 watershed3');
+ for(const [i,q] of selection.quotes.entries()){
+  assert.equal(q.excerpt,files[i].text.slice(q.start,q.end));
+  assert.ok(q.excerpt.includes('watershed'+i));
+  const packed=compactCycleContext(selection.context,[{stage:'Review',output:'Prior'.repeat(300)}],true);
+  assert.ok(packed.includes(q.excerpt));
+ }
+});

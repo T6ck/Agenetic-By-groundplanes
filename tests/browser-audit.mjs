@@ -141,6 +141,18 @@ try{
    source.text=original;job.status='cancelled';await save();
   });
  });
+ await check('editing an upstream original invalidates a derived research input',async()=>{
+  await page.evaluate(async()=>{
+   const j=deskState(),source=data.files.find(f=>f.id===j.sources[0]),original=source.text;
+   const input=appendResearchNode({name:'Verified excerpt',text:'Verified excerpt',state:'evidence',sources:[source.id],quotes:[{id:source.id,excerpt:original.slice(0,20)}]});
+   j.enabled=true;
+   const job=await deskEnqueue('Audit derived inputs',[input.id]);
+   localModelRequest=async()=>{source.text=original+' Updated.';return {output:'Outdated result'};};
+   await deskRun(job);
+   if(job.status!=='blocked'||job.steps.length||job.output)throw Error('Stale upstream source produced a checkpoint');
+   source.text=original;job.status='cancelled';await save();
+  });
+ });
  await check('research sections preserve brief edits and show exact source preflight',async()=>{
   await page.evaluate(()=>{page='Research';projectModule.ensureProject(deskState()).tab='plan';render();});
   await page.locator('.project-tabs [data-project-tab="sources"]').click();

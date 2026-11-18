@@ -290,9 +290,13 @@ render=function() {
   }
   normalizeIcons();applyAppearance();
 };
+function moveGraphCamera(){
+ const c=network.camera, world=$('.network-world');
+ if(world)world.setAttribute('transform','translate('+c.x+' '+c.y+') scale('+c.scale+')');
+}
 function applyNetworkCamera() {
   const world=$('.network-world');if(!world)return;
-  const c=network.camera;world.setAttribute('transform','translate('+c.x+' '+c.y+') scale('+c.scale+')');
+  const c=network.camera;moveGraphCamera();
   $('#network-zoom').textContent=Math.round(c.scale*100)+'%';
   $('.knowledge-svg').dataset.labels=network.labels;
   $('.network-edges').style.opacity=Math.min(.9,network.edgeOpacity*1.45);
@@ -300,45 +304,75 @@ function applyNetworkCamera() {
   $('.network-stage').style.setProperty('--grid-x',(c.x*.12)+'px');$('.network-stage').style.setProperty('--grid-y',(c.y*.12)+'px');
   placeNetworkLabels();
 }
+const graphLabelMetrics=new WeakMap();
 function placeNetworkLabels() {
   const scale=network.camera.scale;
   const groups=[...document.querySelectorAll('[data-knowledge-node]')];
   const viewport = $('.network-stage').getBoundingClientRect();
   const camera = network.camera;
   const heading = document.querySelector('.network-context')?.getBoundingClientRect();
-  const occupied = heading ? [{
+  const headingBoxes = heading ? [{
     x: (heading.left - viewport.left - camera.x) / scale,
     y: (heading.top - viewport.top - camera.y) / scale,
     width: heading.width / scale,
     height: heading.height / scale
   }] : [];
-  const orbBounds=groups.map(group=>{
+  // Partition in world coordinates so each candidate checks only neighboring objects.
+  const cell=128/scale, tiles=new Map();
+  function visit(box,fn){
+    const right=Math.floor((box.x+box.width)/cell),bottom=Math.floor((box.y+box.height)/cell);
+    for(let x=Math.floor(box.x/cell);x<=right;x++)
+      for(let y=Math.floor(box.y/cell);y<=bottom;y++)fn(x+','+y);
+  }
+  function insert(box){
+    visit(box,key=>{let tile=tiles.get(key);if(!tile){tile=[];tiles.set(key,tile);}tile.push(box);});
+  }
+  headingBoxes.forEach(insert);
+  for(const group of groups){
     const id=group.dataset.knowledgeNode,point=network.positions.get(id),r=Number(group.querySelector('.orb-body').getAttribute('r'));
-    return {id,x:point[0]-r,y:point[1]-r,width:r*2,height:r*2};
-  });
+    insert({id,x:point[0]-r,y:point[1]-r,width:r*2,height:r*2});
+  }
   const overlap=(a,b)=>a.x<b.x+b.width&&a.x+a.width>b.x&&a.y<b.y+b.height&&a.y+a.height>b.y;
   for(const group of groups) {
     const id=group.dataset.knowledgeNode,[x,y]=network.positions.get(id),text=group.querySelector('text');
     const r=Number(group.querySelector('.orb-body').getAttribute('r')),gap=12/scale;
+    const sx=x*scale+camera.x,sy=y*scale+camera.y;
+    if(sx < -96 || sy < -64 || sx > viewport.width+96 || sy > viewport.height+64){
+      group.classList.add('label-collision');continue;
+    }
     const state = text.querySelector('.node-state-label');
     const full = state && scale >= .8;
     const nameLength = text.firstChild?.textContent.length || 0;
-    const width = Math.max(nameLength ? text.getSubStringLength(0, nameLength) : 0, full ? state.getComputedTextLength() : 0);
+    let metric=graphLabelMetrics.get(text);
+    if(!metric || metric.scale!==scale || metric.full!==!!full || metric.fontStatus!==document.fonts?.status){
+      metric={scale,full:!!full,fontStatus:document.fonts?.status,width:Math.max(nameLength?text.getSubStringLength(0,nameLength):0,full?state.getComputedTextLength():0)};
+      graphLabelMetrics.set(text,metric);
+    }
+    const width=metric.width;
     const height = (full ? 32 : 16) / scale;
     const candidates=[{x:r+gap,y:4/scale},{x:-width/2,y:-r-gap},{x:-width/2,y:r+gap+height/2},{x:-r-gap-width,y:4/scale},...[-2,2,-3,3,-4,4,-5,5,-6,6].map(step=>({x:r+gap,y:step*height}))];
     const cost=candidate=>{
       const box={x:x+candidate.x-3/scale,y:y+candidate.y-13/scale,width:width+6/scale,height};
       const c=camera;const outside=box.x*c.scale+c.x<16||(box.x+box.width)*c.scale+c.x>viewport.width-16||box.y*c.scale+c.y<16||(box.y+box.height)*c.scale+c.y>viewport.height-100;
-      return {box,hits:(outside?10:0)+occupied.filter(b=>overlap(box,b)).length+orbBounds.filter(b=>b.id!==id&&overlap(box,b)).length*2};
+      let hits=outside?10:0;
+      const checked=new Set();
+      visit(box,key=>{
+        for(const other of tiles.get(key)||[]){
+          if(other.id===id||checked.has(other))continue;
+          checked.add(other);
+          if(overlap(box,other))hits+=other.id?2:1;
+        }
+      });
+      return {box,hits};
     };
     let selected=candidates[0],best=cost(selected);
-    for(const candidate of candidates.slice(1)){const result=cost(candidate);if(result.hits<best.hits){selected=candidate;best=result}if(!best.hits)break}
+    for(const candidate of candidates.slice(1)){if(!best.hits)break;const result=cost(candidate);if(result.hits<best.hits){selected=candidate;best=result}if(!best.hits)break}
     text.setAttribute('x',selected.x);text.setAttribute('y',selected.y);
     if (state) {
       state.setAttribute('x', selected.x);
       state.setAttribute('dy', 15 / scale);
     }
-    if(!best.hits)occupied.push(best.box);
+    if(!best.hits)insert(best.box);
     const tether=group.querySelector('.node-tether');if(tether){const tx=selected.x<0?selected.x+width/2:selected.x-4/scale,ty=selected.y-4/scale,d=Math.hypot(tx,ty)||1;tether.setAttribute('x1',tx/d*(r+4));tether.setAttribute('y1',ty/d*(r+4));tether.setAttribute('x2',tx);tether.setAttribute('y2',ty)}
     group.classList.toggle('label-collision',best.hits>0);
   }
@@ -371,9 +405,9 @@ function fitNetwork() {
   };
   applyNetworkCamera();persistNetwork();
 }
-function zoomNetwork(factor,x,y) {
+function zoomNetwork(factor,x,y,continuous=false) {
   const c=network.camera,scale=Math.max(.04,Math.min(3,c.scale*factor));
-  network.camera={x:x-(x-c.x)*scale/c.scale,y:y-(y-c.y)*scale/c.scale,scale};applyNetworkCamera();
+  network.camera={x:x-(x-c.x)*scale/c.scale,y:y-(y-c.y)*scale/c.scale,scale};if(continuous)moveGraphCamera();else applyNetworkCamera();
 }
 function highlightNetwork() {
   const id=network.hovered||document.activeElement?.closest('[data-knowledge-node]')?.dataset.knowledgeNode||[...studio.selected][0];
@@ -508,19 +542,18 @@ document.addEventListener('pointermove',e=>{
       if(edge.dataset.source===d.id){edge.setAttribute('x1',p[0]);edge.setAttribute('y1',p[1])}
       if(edge.dataset.target===d.id){edge.setAttribute('x2',p[0]);edge.setAttribute('y2',p[1])}
     }
-    placeNetworkLabels();
-  } else {network.camera.x=d.camera.x+dx;network.camera.y=d.camera.y+dy;applyNetworkCamera()}
+  } else {network.camera.x=d.camera.x+dx;network.camera.y=d.camera.y+dy;moveGraphCamera()}
 });
 document.addEventListener('pointerup',()=>{
   const d=network.drag;network.drag=null;if(!d?.moved)return;
   network.ignoreClick=true;setTimeout(()=>network.ignoreClick=false,100);
   if(d.id)activeSpace().graphPositions=Object.fromEntries(network.positions);
-  persistNetwork();
+  applyNetworkCamera();persistNetwork();
 });
 document.addEventListener('wheel',e=>{
   if(!e.target.closest('.knowledge-svg'))return;e.preventDefault();const b=$('.network-stage').getBoundingClientRect();
-  zoomNetwork(Math.exp(-e.deltaY*.001),e.clientX-b.left,e.clientY-b.top);
-  clearTimeout(network.cameraTimer);network.cameraTimer=setTimeout(persistNetwork,200);
+  zoomNetwork(Math.exp(-e.deltaY*.001),e.clientX-b.left,e.clientY-b.top,true);
+  clearTimeout(network.cameraTimer);network.cameraTimer=setTimeout(()=>{if(inNetwork()){applyNetworkCamera();persistNetwork();}},120);
 },{passive:false});
 document.addEventListener('keydown',e=>{
   if(!document.body.classList.contains('knowledge-mode')||$('#dialog').open)return;

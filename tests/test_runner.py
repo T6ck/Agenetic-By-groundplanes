@@ -27,6 +27,12 @@ class RunnerBoundary(unittest.TestCase):
     def test_model_mismatch_rejected(self):
         p=dict(model='other.gguf',role='Reviewer',instructions='Cite sources',task='Review',context='')
         self.assertEqual(self.request('/run','POST',payload=p)[0],409)
+    def test_reviewed_context_is_never_silently_cut(self):
+        payload=dict(model='audit.gguf',role='Reviewer',instructions='Compare',task='Question',context='測'*1500,preserve_context=True)
+        status,body=self.request('/run','POST',payload=payload)
+        self.assertEqual(status,400)
+        self.assertIn('passages',body['error'])
+
     def test_success_uses_cli_output(self):
         p=dict(model='audit.gguf',role='Reviewer',instructions='Cite sources',task='Review',context='')
         self.assertEqual(self.request('/run','POST',payload=p),(200,{'output':'fixture response'}))

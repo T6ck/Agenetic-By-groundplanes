@@ -23,7 +23,15 @@ export function createPassageIndex(){
    let best=null,score=-1;
    for(const passage of entry.passages){const n=query.reduce((sum,q)=>sum+Number(passage.words.has(q)),0);if(n>score){best=passage;score=n;}}
    sources.push({id:file.id,name:file.name,scanned:limit,total:text.length,partial:limit<text.length||!!file.pdfIndex?.partial,readable:!!text.trim()});
-   if(best&&text.trim())quotes.push({id:file.id,name:file.name,excerpt:best.excerpt,start:best.start,end:best.end,score,matched:score>0});
+   if(best&&text.trim()){
+    const header='File: '+file.name+' ['+file.id+'] · characters ';
+    const budget=Math.floor(1500/files.length)-header.length-24;
+    if(budget<24)throw Error('A source name leaves too little room for evidence. Shorten the name before running.');
+    const firstHit=[...best.excerpt.matchAll(/[\p{L}\p{N}]{3,}/gu)].find(hit=>query.includes(hit[0].toLowerCase()));
+    const offset=Math.max(0,Math.min(best.excerpt.length-budget,(firstHit?.index||0)-Math.floor(budget/3)));
+    const excerpt=best.excerpt.slice(offset,offset+budget),start=best.start+offset;
+    quotes.push({id:file.id,name:file.name,excerpt,start,end:start+excerpt.length,score,matched:score>0});
+   }
   }
   return {sources,quotes,context:quotes.map(q=>'File: '+q.name+' ['+q.id+'] · characters '+(q.start+1)+'–'+q.end+'\n'+q.excerpt).join('\n\n')};
  }};

@@ -12,7 +12,7 @@ Optional follow-ups branch from the same original sources to a maximum depth of 
 
 - One local request at a time, including competing scheduler ticks.
 - Quick or Balanced request profiles, source checks every 5–60 minutes, and a configurable 1–48 run limit per rolling 24 hours.
-- Up to 20 unfinished tasks and 200 journal records per workspace. Capacity errors pause scheduling with a visible explanation.
+- Up to 20 unfinished tasks per workspace. Finished tasks remain in paginated history. Capacity errors pause scheduling with a visible explanation.
 - Pause saves the current completed pass and schedules no next pass. Stop asks the runner to cancel; cancellation support determines how quickly the active request ends.
 - Source changes during inference block stale output. Resume retains completed passes only while the source revision still matches.
 - Changing workspaces pauses scheduling. Relaunching the app preserves the journal but requires an explicit restart.

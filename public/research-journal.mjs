@@ -1,14 +1,34 @@
 // Pure scheduling rules. The browser adapter owns storage and model requests.
 export const STAGES=['Evidence review','Critical review','Synthesis'];
 export function newJournal(){return {version:1,goal:'',model:'',sources:[],performance:'quick',intervalMinutes:15,dailyLimit:12,autoFollowups:false,organize:true,archiveDuplicates:false,enabled:false,jobs:[],events:[],seen:{},lastScan:0};}
-export function recoverJournal(j){j.enabled=false;for(const job of j.jobs)if(job.status==='running')job.status='interrupted';return j;}
+export function recoverJournal(j){
+ j.enabled=false;
+ for(const job of j.jobs){
+  if(job.status==='running')job.status='interrupted';
+  if(job.parent && job.status==='queued' && !job.approvedAt)job.status='proposed';
+ }
+ return j;
+}
+export function setupKey(j){
+ const p=j.project||{};
+ return JSON.stringify([j.model,j.performance||'quick',p.audience||'',p.deliverable||'Research brief',p.completion||'']);
+}
+export function reconcileReviews(j,files){
+ const visible=new Map(files.map(f=>[f.id,f]));
+ for(const job of j.jobs){
+  if(!['needs_review','archived'].includes(job.status))continue;
+  const output=visible.get(job.output);
+  job.status=!output||output.research?.archived?'archived':output.research?.state==='pending'?'needs_review':'completed';
+ }
+}
 export function addEvent(j,message,now=Date.now()){j.events.unshift({time:now,message});j.events=j.events.slice(0,100);}
 export function queueJob(j,{id,question,sources,revision,context,quotes=[],parent='',depth=0,task},now=Date.now()){
- if(j.jobs.some(x=>x.revision===revision&&x.question===question&&x.status!=='cancelled'))return null;
+ const setup=setupKey(j);
+ if(j.jobs.some(x=>x.revision===revision&&x.question===question&&x.setup===setup&&x.status!=='cancelled'))return null;
 
  if(j.jobs.filter(x=>['queued','running','interrupted'].includes(x.status)).length>=20)throw Error('The queue has 20 unfinished tasks. Finish or cancel some before adding more.');
- const job={id,question,sources:[...sources],revision,context,quotes,parent,depth,task,status:'queued',steps:[],createdAt:now,model:j.model,performance:j.performance||'quick'};
- j.jobs.push(job);addEvent(j,'Queued: '+question,now);return job;
+ const job={id,question,sources:[...sources],revision,context,quotes,parent,depth,task,setup,status:parent?'proposed':'queued',steps:[],createdAt:now,model:j.model,performance:j.performance||'quick'};
+ j.jobs.push(job);addEvent(j,(parent?'Proposed: ':'Queued: ')+question,now);return job;
 }
 export function nextJob(j,now=Date.now()){
  if(!j.enabled||j.jobs.filter(x=>x.status==='needs_review').length>=5)return null;

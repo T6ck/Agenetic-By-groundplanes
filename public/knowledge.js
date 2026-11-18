@@ -303,7 +303,15 @@ function applyNetworkCamera() {
 function placeNetworkLabels() {
   const scale=network.camera.scale;
   const groups=[...document.querySelectorAll('[data-knowledge-node]')];
-  const occupied=[];
+  const viewport = $('.network-stage').getBoundingClientRect();
+  const camera = network.camera;
+  const heading = document.querySelector('.network-context')?.getBoundingClientRect();
+  const occupied = heading ? [{
+    x: (heading.left - viewport.left - camera.x) / scale,
+    y: (heading.top - viewport.top - camera.y) / scale,
+    width: heading.width / scale,
+    height: heading.height / scale
+  }] : [];
   const orbBounds=groups.map(group=>{
     const id=group.dataset.knowledgeNode,point=network.positions.get(id),r=Number(group.querySelector('.orb-body').getAttribute('r'));
     return {id,x:point[0]-r,y:point[1]-r,width:r*2,height:r*2};
@@ -311,16 +319,25 @@ function placeNetworkLabels() {
   const overlap=(a,b)=>a.x<b.x+b.width&&a.x+a.width>b.x&&a.y<b.y+b.height&&a.y+a.height>b.y;
   for(const group of groups) {
     const id=group.dataset.knowledgeNode,[x,y]=network.positions.get(id),text=group.querySelector('text');
-    const r=Number(group.querySelector('.orb-body').getAttribute('r')),width=text.getComputedTextLength(),height=16/scale,gap=12/scale;
+    const r=Number(group.querySelector('.orb-body').getAttribute('r')),gap=12/scale;
+    const state = text.querySelector('.node-state-label');
+    const full = state && scale >= .8;
+    const nameLength = text.firstChild?.textContent.length || 0;
+    const width = Math.max(nameLength ? text.getSubStringLength(0, nameLength) : 0, full ? state.getComputedTextLength() : 0);
+    const height = (full ? 32 : 16) / scale;
     const candidates=[{x:r+gap,y:4/scale},{x:-width/2,y:-r-gap},{x:-width/2,y:r+gap+height/2},{x:-r-gap-width,y:4/scale},...[-2,2,-3,3,-4,4,-5,5,-6,6].map(step=>({x:r+gap,y:step*height}))];
     const cost=candidate=>{
-      const box={x:x+candidate.x-3/scale,y:y+candidate.y-height*.8,width:width+6/scale,height};
-      const viewport=$('.network-stage').getBoundingClientRect(),c=network.camera;const outside=box.x*c.scale+c.x<16||(box.x+box.width)*c.scale+c.x>viewport.width-16||box.y*c.scale+c.y<16||(box.y+box.height)*c.scale+c.y>viewport.height-100;
+      const box={x:x+candidate.x-3/scale,y:y+candidate.y-13/scale,width:width+6/scale,height};
+      const c=camera;const outside=box.x*c.scale+c.x<16||(box.x+box.width)*c.scale+c.x>viewport.width-16||box.y*c.scale+c.y<16||(box.y+box.height)*c.scale+c.y>viewport.height-100;
       return {box,hits:(outside?10:0)+occupied.filter(b=>overlap(box,b)).length+orbBounds.filter(b=>b.id!==id&&overlap(box,b)).length*2};
     };
     let selected=candidates[0],best=cost(selected);
     for(const candidate of candidates.slice(1)){const result=cost(candidate);if(result.hits<best.hits){selected=candidate;best=result}if(!best.hits)break}
     text.setAttribute('x',selected.x);text.setAttribute('y',selected.y);
+    if (state) {
+      state.setAttribute('x', selected.x);
+      state.setAttribute('dy', 15 / scale);
+    }
     if(!best.hits)occupied.push(best.box);
     const tether=group.querySelector('.node-tether');if(tether){const tx=selected.x<0?selected.x+width/2:selected.x-4/scale,ty=selected.y-4/scale,d=Math.hypot(tx,ty)||1;tether.setAttribute('x1',tx/d*(r+4));tether.setAttribute('y1',ty/d*(r+4));tether.setAttribute('x2',tx);tether.setAttribute('y2',ty)}
     group.classList.toggle('label-collision',best.hits>0);

@@ -26,6 +26,14 @@ async function check(name,run){await run();checks.push(name);console.log('PASS '
 try{
  await page.goto('http://127.0.0.1:'+server.address().port);
  await page.waitForSelector('.knowledge-node');
+ await check('graph status follows its title when zoom changes', async()=>{
+  await page.locator('[data-network="zoom-in"]').click();
+  const labels=await page.locator('.knowledge-node text').evaluateAll(elements=>elements.map(title=>[
+   title.getAttribute('x'), title.querySelector('.node-state-label')?.getAttribute('x')
+  ]));
+  assert.ok(labels.length>0);
+  assert.ok(labels.every(([title,state])=>title===state));
+ });
  await check('save closes inspector and stays closed',async()=>{
   await page.locator('[data-network="open"]').first().click();
   await page.locator('[data-reader-mode="edit"]').click();
@@ -93,7 +101,10 @@ try{
   assert.equal(await page.evaluate(()=>deskState().enabled),false);
   assert.match(await page.locator('#desk-live').innerText(),/needs review/);
   await page.screenshot({path:out+'/research-desk.png'});
-  await page.locator('[data-desk-review]').first().click();await page.waitForSelector('#claim-review');
+  assert.equal(await page.locator('[data-desk-stop]').isVisible(),false);
+  await page.locator('.project-next [data-project-tab="review"]').click();
+  await page.waitForSelector('.project-review-row');
+  await page.locator('.project-review-row [data-desk-review]').first().click();await page.waitForSelector('#claim-review');
   await page.screenshot({path:out+'/claim-review.png'});
   await page.locator('#dialog [data-act="close"]').click();
  });

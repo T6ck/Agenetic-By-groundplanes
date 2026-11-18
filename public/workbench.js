@@ -22,7 +22,7 @@ networkNode=function(n,links){
  return html;
 };
 const workbenchCamera=applyNetworkCamera;
-applyNetworkCamera=function(){workbenchCamera();const svg=$('.knowledge-svg');if(svg)svg.dataset.detail=network.camera.scale>=.8?'full':'compact';};
+applyNetworkCamera=function(){const svg=$('.knowledge-svg');if(svg)svg.dataset.detail=network.camera.scale>=.8?'full':'compact';workbenchCamera();};
 let readingNode='';
 const workbenchInspector=drawInspector;
 drawInspector=function(){

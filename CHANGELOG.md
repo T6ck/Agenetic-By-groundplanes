@@ -4,6 +4,9 @@ For installers, checksums, and notes by build, see [GitHub Releases](https://git
 
 ## 0.2.17
 
+- Align graph titles with their status labels while zooming. Canvas cards now use the same type colors as the graph and show a stronger selection outline.
+- The Research plan links directly to pending drafts or the selected source passages and shows run controls as they become available.
+
 - Add a persistent Research tab with a local task queue, source-change monitoring, saved pass checkpoints, and optional bounded follow-up questions. Research continues across views while the app stays open and the device stays awake.
 - Save results as linked drafts for claim review. Pause on changed sources or runner failures, and resume only unfinished passes. Limit concurrent requests and daily runs.
 - Place new research beside existing sources without rearranging manual layouts. Optionally archive exact duplicate generated drafts with a restore control.

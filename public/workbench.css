@@ -154,3 +154,33 @@ html body.mindspace #content .community-shell.compose-open{grid-template-columns
 @media(max-width:600px){.project-purpose,.brief-diff{grid-template-columns:1fr}.project-section-heading,.project-review-row,.project-next{align-items:flex-start;flex-direction:column;gap:12px}.project-tabs{gap:2px}.project-tabs button{min-height:44px;padding:8px 14px}.project-pagination{flex-wrap:wrap}}
 html body .research-desk .project-tabs [aria-current=page]{background:var(--ax-ink)!important;color:var(--ax-bg)!important;opacity:1}
 .project-panel{font-size:15px;line-height:1.65}.project-panel p{line-height:1.65}.project-source blockquote{font-size:15px;line-height:1.75}.project-source>div{display:flex;align-items:center;gap:20px;justify-content:space-between}
+
+/* Source types carry the same markings from the graph into the canvas. */
+html body .card-layer .mind-card {
+  --card-kind: var(--node-file);
+  border-inline-start: 3px solid var(--card-kind)!important;
+}
+html body .card-layer .mind-card.agent { --card-kind: var(--node-agent) }
+html body .card-layer .mind-card.task { --card-kind: var(--node-task) }
+html body .card-layer .mind-card.model { --card-kind: var(--node-model) }
+html body .card-layer .mind-card:is(.is-selected,:focus-visible) {
+  outline: 2px solid var(--card-kind);
+  outline-offset: 3px;
+}
+html body .card-layer .mind-card .card-header {
+  color: var(--ax-muted);
+  font-family: 'IBM Plex Mono', monospace;
+  letter-spacing: .04em;
+}
+.research-desk .project-next {
+  padding: 12px 16px;
+  border: 1px solid var(--ax-line);
+  border-inline-start: 3px solid var(--ax-accent);
+  background: var(--ax-panel);
+  border-radius: 8px;
+}
+.research-desk .project-next button {color: var(--ax-accent);font-weight:600}
+.research-desk .project-source blockquote {
+  border-radius: 0 8px 8px 0;
+  background: var(--ax-panel);
+}

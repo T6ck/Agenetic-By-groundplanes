@@ -12,8 +12,31 @@ async function deskRevision(ids){
 }
 function deskEvent(text){deskModule.addEvent(deskState(),text);}
 function deskTask(job){return data.tasks.find(t=>t.id===job.task);}
+function refreshDeskActions() {
+ const journal = deskState();
+ const ready = Boolean(journal.goal && journal.model && journal.sources.length);
+ const controls = [
+  ['[data-desk-start]', ready && !journal.enabled && !deskBusy],
+  ['[data-desk-pause]', journal.enabled],
+  ['[data-desk-stop]', deskBusy],
+  ['[data-desk-scan]', ready && !deskBusy]
+ ];
+ for (const [selector, available] of controls) {
+  const button = document.querySelector(selector);
+  if (button) button.hidden = !available;
+ }
+ const next = document.querySelector('.project-next');
+ if (!next) return;
+ const pending = workspaceSourceFiles().filter(file => file.research?.state === 'pending' && !file.research.archived).length;
+ const target = next.querySelector('button');
+ next.hidden = !ready && !pending;
+ next.querySelector('span').textContent = pending ? pending + (pending === 1 ? ' draft awaits review' : ' drafts await review') : journal.sources.length + (journal.sources.length === 1 ? ' source selected' : ' sources selected');
+ target.dataset.projectTab = pending ? 'review' : 'sources';
+ target.textContent = pending ? 'Review drafts' : 'Inspect passages';
+}
 function deskRefresh(){
  if(page==='Research'){
+  refreshDeskActions();
   const live=$('#desk-live');if(live)live.innerHTML=deskLive();
   const status=$('#desk-mode');if(status)status.textContent=deskState().enabled?'Watching selected sources':'Paused';
  }
@@ -162,7 +185,7 @@ function deskSourcesView(){
 }
 function deskReviewView(){
  const files=workspaceSourceFiles(),drafts=files.filter(f=>f.research?.state==='pending'&&!f.research.archived),claims=files.filter(f=>f.research?.draft);
- return '<div class="project-section-heading"><div><h2>Evidence before conclusions</h2><p>Read a draft, select a claim, and check its exact source. Unreviewed drafts never enter the brief.</p></div><button data-project-tab="brief">Open brief</button></div>'+(!drafts.length?'<p class="desk-empty">No drafts waiting. Results will appear here after a run.</p>':drafts.map(f=>'<article class="project-review-row"><div><span class="section-kicker">Draft · '+claims.filter(c=>c.research.draft===f.id).length+' claim decisions</span><h3>'+esc(f.name)+'</h3><p>'+esc(f.text.slice(0,240))+'</p></div><button data-desk-review="'+esc(f.id)+'">Review evidence</button>'+(claims.some(c=>c.research.draft===f.id)?'<button data-draft-finish="'+esc(f.id)+'">Finish this review</button>':'')+'</article>').join(''));
+ return '<div class="project-section-heading"><div><h2>Drafts to review</h2><p>Read a draft, select a claim, and check its exact source. Unreviewed drafts never enter the brief.</p></div><button data-project-tab="brief">Open brief</button></div>'+(!drafts.length?'<p class="desk-empty">No drafts waiting. Results will appear here after a run.</p>':drafts.map(f=>'<article class="project-review-row"><div><span class="section-kicker">Draft · '+claims.filter(c=>c.research.draft===f.id).length+' claim decisions</span><h3>'+esc(f.name)+'</h3><p>'+esc(f.text.slice(0,240))+'</p></div><button data-desk-review="'+esc(f.id)+'">Review evidence</button>'+(claims.some(c=>c.research.draft===f.id)?'<button data-draft-finish="'+esc(f.id)+'">Finish this review</button>':'')+'</article>').join(''));
 }
 function deskBriefView(){
  const p=projectModule.ensureProject(deskState()),eligible=deskEvidence(),ids=new Set(eligible.map(f=>f.id));
@@ -173,7 +196,7 @@ function renderDesk(){
  renderDeskBase();const j=deskState(),p=projectModule.ensureProject(j),tab=['plan','sources','review','brief'].includes(p.tab)?p.tab:'plan';
  const main=$('.research-desk'),title=$('.desk-title');
  title.querySelector('h1').textContent=j.goal||'Start a research project';
- title.querySelector('p').textContent=p.audience?'For '+p.audience+' · '+p.deliverable:'A question, its evidence, and the work still to do.';
+ title.querySelector('p').textContent=j.goal?[p.deliverable, p.audience && 'For '+p.audience].filter(Boolean).join(' · '):'Choose a question and the sources your model should read.';
  const tabs=document.createElement('nav');tabs.className='project-tabs';tabs.setAttribute('aria-label','Research sections');
  tabs.innerHTML=[['plan','Plan'],['sources','Sources'],['review','Review'],['brief','Brief']].map(([id,label])=>'<button data-project-tab="'+id+'" aria-current="'+(id===tab?'page':'false')+'">'+label+'</button>').join('');title.after(tabs);
  const setup=$('.desk-setup'),form=$('#desk-setup');
@@ -183,11 +206,12 @@ function renderDesk(){
  setup.hidden=tab!=='plan';live.hidden=tab!=='plan';toolbar.hidden=!['plan','sources'].includes(tab);boundary.hidden=tab!=='plan';
  if(tab==='plan'){
   if(!j.goal)setup.open=true;
-  const pages=document.createElement('div');pages.className='project-pagination';pages.innerHTML='<button data-history-page="'+Math.max(0,deskHistoryPage-1)+'" '+(!deskHistoryPage?'disabled':'')+'>Newer tasks</button><span>Page '+(deskHistoryPage+1)+' of '+Math.max(1,Math.ceil(j.jobs.length/20))+'</span><button data-history-page="'+(deskHistoryPage+1)+'" '+((deskHistoryPage+1)*20>=j.jobs.length?'disabled':'')+'>Older tasks</button>';main.append(pages);
-  setup.insertAdjacentHTML('afterend','<div class="project-next"><span>Next: inspect the source passages before starting a run.</span><button data-project-tab="sources">Inspect sources '+lineIcon('arrow')+'</button></div>');
+  const pages=document.createElement('div');pages.className='project-pagination';pages.innerHTML='<button data-history-page="'+Math.max(0,deskHistoryPage-1)+'" '+(!deskHistoryPage?'disabled':'')+'>Newer tasks</button><span>Page '+(deskHistoryPage+1)+' of '+Math.max(1,Math.ceil(j.jobs.length/20))+'</span><button data-history-page="'+(deskHistoryPage+1)+'" '+((deskHistoryPage+1)*20>=j.jobs.length?'disabled':'')+'>Older tasks</button>';if(j.jobs.length>20)main.append(pages);
+  setup.insertAdjacentHTML('afterend','<div class="project-next"><span></span><button data-project-tab="sources">Inspect passages</button></div>');
  }else{
   const panel=document.createElement('section');panel.className='project-panel';panel.innerHTML=tab==='sources'?deskSourcesView():tab==='review'?deskReviewView():deskBriefView();main.append(panel);
  }
+ refreshDeskActions();
 }
 async function projectSaveEdit(fn){const before=structuredClone(deskState().project);fn();try{await save();}catch(error){deskState().project=before;throw error;}}
 async function projectLeave(){if($('#desk-setup')?.dataset.dirty)throw Error('Save research setup before leaving this section.');const form=$('#project-brief');if(form&&form.elements.text.value!==deskState().project.brief.text){await projectSaveEdit(()=>{deskState().project.brief.text=form.elements.text.value;});} }

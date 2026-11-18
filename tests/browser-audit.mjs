@@ -26,6 +26,48 @@ async function check(name,run){await run();checks.push(name);console.log('PASS '
 try{
  await page.goto('http://127.0.0.1:'+server.address().port);
  await page.waitForSelector('.knowledge-node');
+ await check('dense graph keeps labels and the cursor anchor stable through a wheel burst', async()=>{
+  const result=await page.evaluate(async()=>{
+   const svg=document.querySelector('.knowledge-svg');
+   const layer=svg.querySelector('.network-nodes');
+   const original=layer.firstElementChild;
+   const bounds=svg.getBoundingClientRect();
+   const x=bounds.width/2,y=bounds.height/2;
+   const oldCamera={...network.camera}, added=[];
+   const title=original.querySelector('text');
+   const renderedSize=()=>parseFloat(getComputedStyle(title).fontSize)*title.getScreenCTM().a;
+   const anchor=()=>[(x-network.camera.x)/network.camera.scale,(y-network.camera.y)/network.camera.scale];
+   const wheel=(delta,mode)=>svg.dispatchEvent(new WheelEvent('wheel',{
+    bubbles:true,cancelable:true,clientX:bounds.left+x,clientY:bounds.top+y,deltaY:delta,deltaMode:mode
+   }));
+   try{
+    const fragment=document.createDocumentFragment();
+    for(let i=0;i<600;i++){
+     const id='wheel-test-'+i, point=[(i%30)*62,Math.floor(i/30)*48];
+     const node=original.cloneNode(true);
+     node.dataset.knowledgeNode=id;node.setAttribute('transform','translate('+point.join(' ')+')');
+     network.positions.set(id,point);added.push(id);fragment.append(node);
+    }
+    layer.append(fragment);
+    network.camera={x:0,y:0,scale:1};applyNetworkCamera();
+    const initial=renderedSize(), origin=anchor();
+    for(let i=0;i<10;i++)wheel(-3,1);
+    await new Promise(requestAnimationFrame);
+    const moving=renderedSize(),scale=network.camera.scale,after=anchor();
+    const readout=document.querySelector('#network-zoom').textContent;
+    await new Promise(resolve=>setTimeout(resolve,220));
+    return {initial,moving,settled:renderedSize(),scale,readout,anchorShift:Math.hypot(after[0]-origin[0],after[1]-origin[1])};
+   }finally{
+    added.forEach(id=>network.positions.delete(id));
+    network.camera=oldCamera;activeSpace().graphCamera={...oldCamera};render();
+   }
+  });
+  assert.ok(Math.abs(result.moving/result.initial-1)<.01);
+  assert.ok(Math.abs(result.settled/result.initial-1)<.01);
+  assert.ok(Math.abs(result.scale-Math.exp(.48))<.0001);
+  assert.equal(result.readout,Math.round(result.scale*100)+'%');
+  assert.ok(result.anchorShift<.01);
+ });
  await check('graph status follows its title when zoom changes', async()=>{
   await page.locator('[data-network="zoom-in"]').click();
   const labels=await page.locator('.knowledge-node text').evaluateAll(elements=>elements.map(title=>[

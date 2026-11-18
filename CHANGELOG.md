@@ -4,6 +4,10 @@ For installers, checksums, and notes by build, see [GitHub Releases](https://git
 
 ## 0.2.17
 
+- Research keeps matching passages in the model input and checks their upstream evidence before saving each pass. Follow-ups remain proposals across restarts. Archived duplicates release review capacity.
+- Pan and wheel gestures move the graph immediately. Label placement checks nearby nodes after the gesture settles.
+- Select a passage directly in claim review. Package previews show the community upload size, and team workflow uploads accept up to 16 MB.
+
 - Align graph titles with their status labels while zooming. Canvas cards now use the same type colors as the graph and show a stronger selection outline.
 - The Research plan links directly to pending drafts or the selected source passages and shows run controls as they become available.
 

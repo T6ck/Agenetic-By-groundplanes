@@ -101,13 +101,22 @@ function reviewResearchDraft(draft){
  modal(esc(draft.name), '<p>Draft · excluded from task sources until you review individual claims.</p><pre class="output">'+esc(draft.text)+'</pre>'+
   '<h3>Claim review</h3>'+(reviewed.length?'<ul>'+reviewed.map(file=>'<li>'+esc(file.research.state)+' · '+esc(file.name)+'</li>').join('')+'</ul>':'')+
   '<form id="claim-review"><label class="field">One claim<textarea name="claim" required maxlength="600"></textarea></label>'+
-  '<label class="field">Decision<select name="decision"><option value="supported">Supported by the quoted source</option><option value="unresolved">Needs more evidence</option><option value="rejected">Rejected</option></select></label>'+
+  '<label class="field">Decision<select name="decision" required><option value="">Choose a decision</option><option value="supported">Supported by the quoted source</option><option value="unresolved">Needs more evidence</option><option value="rejected">Rejected</option></select></label>'+
   '<label class="field">Original connected source<select name="source"><option value="">Choose a source</option>'+choices.map(file=>'<option value="'+esc(file.id)+'">'+esc(file.name)+'</option>').join('')+'</select></label>'+
-  '<pre id="claim-source-preview" class="output" hidden></pre><label class="field">Exact supporting quote<textarea name="quote" maxlength="1200"></textarea></label>'+
+  '<pre id="claim-source-preview" class="output" hidden></pre><button type="button" id="claim-use-selection" hidden>Use selected passage</button><label class="field">Exact supporting quote<textarea name="quote" maxlength="1200"></textarea></label>'+
   '<label class="field">Reason for this decision<textarea name="rationale" maxlength="1600" placeholder="Explain what the source establishes and any limits."></textarea></label>'+
   '<button type="submit" class="primary">Save reviewed claim</button><p role="status"></p></form>');
  const form = $('#claim-review'), record = data;
+ const usePassage=$('#claim-use-selection'),preview=$('#claim-source-preview');
+ let selectedPassage='';
+ preview.onpointerup=preview.onkeyup=()=>{
+  const selection=window.getSelection();
+  selectedPassage=selection && preview.contains(selection.anchorNode) && preview.contains(selection.focusNode)?selection.toString().trim():'';
+  usePassage.hidden=selectedPassage.length<12 || selectedPassage.length>1200;
+ };
+ usePassage.onclick=()=>{form.elements.quote.value=selectedPassage;form.elements.decision.focus();};
  form.elements.source.onchange = () => {
+  selectedPassage='';usePassage.hidden=true;
   const source = choices.find(file=>file.id===form.elements.source.value), preview = $('#claim-source-preview');
   preview.hidden = !source;
   preview.textContent = source?.text||'';

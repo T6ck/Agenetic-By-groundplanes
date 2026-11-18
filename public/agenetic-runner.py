@@ -464,7 +464,10 @@ def main():
                     return self.send_json(400, {'error': 'This task is too long for the selected profile. Shorten it or choose a larger context.'})
                 instructions = values['instructions'].encode('utf-8')[:budget // 4].decode('utf-8', 'ignore')
                 context_budget = max(0, budget - len(task.encode('utf-8')) - len(instructions.encode('utf-8')) - 800)
-                context = values['context'].encode('utf-8')[:context_budget].decode('utf-8', 'ignore')
+                context_bytes = values['context'].encode('utf-8')
+                if values.get('preserve_context') and len(context_bytes) > context_budget:
+                    return self.send_json(400, {'error': 'The selected passages exceed this model profile. Choose Balanced, shorten the goal or select fewer sources.'})
+                context = context_bytes[:context_budget].decode('utf-8', 'ignore')
                 prompt = (
                     f"Role: {values['role']}\n"
                     f"Agent instructions: {instructions}\n"

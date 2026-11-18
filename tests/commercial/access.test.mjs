@@ -29,6 +29,8 @@ test('commercial isolation, seats, replay, revisions and lifecycle',async()=>{
  const project=await cmd(member,'project_put',{team_id:team,name:'Notes',package:{hello:'world'}});
  await assert.rejects(cmd(owner,'project_put',{team_id:team,id:project.id,revision:0,name:'stale',package:{}}),/Project changed/);
  await assert.rejects(cmd(outsider,'project_get',{team_id:team,id:project.id}),/not available/);
+ const large=await cmd(member,'project_put',{team_id:team,name:'Research files',package:{attachment:'x'.repeat(1200000)}});
+ assert.equal((await cmd(owner,'project_get',{team_id:team,id:large.id})).package.attachment.length,1200000);
  const keyBody={team_id:team,name:'Laptop',key_hash:'hash',request_id:randomUUID()};const key=await cmd(member,'key_create',keyBody);
  await assert.rejects(cmd(member,'key_create',keyBody),/already created/);
  await cmd(owner,'remove',{team_id:team,user_id:member});

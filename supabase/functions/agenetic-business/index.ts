@@ -11,8 +11,11 @@ Deno.serve(async(req)=>{
  const origin=req.headers.get('origin')||'';if(origin&&!allowed.has(origin))return json({error:'Origin not allowed'},403);
  if(req.method==='OPTIONS')return json({},200,origin);if(req.method!=='POST')return json({error:'POST required'},405,origin);
  try {
-  const raw=await req.text();if(raw.length>1100000)return json({error:'Request exceeds 1 MB'},413,origin);
+  if(Number(req.headers.get('content-length')||0)>16100000)return json({error:'Team workflow requests can be up to 16 MB.'},413,origin);
+  const raw=await req.text(),bytes=new TextEncoder().encode(raw).byteLength;
+  if(bytes>16100000)return json({error:'Team workflow requests can be up to 16 MB.'},413,origin);
   const b=JSON.parse(raw),action=b.action;delete b.action;
+  if(action!=='project_put' && bytes>1100000)return json({error:'Request exceeds 1 MB'},413,origin);
   let uid:string|undefined,deviceTeam:string|undefined;
   const token=(req.headers.get('authorization')||'').replace(/^Bearer /,'');
   if(token.startsWith('agk_')){
@@ -32,6 +35,7 @@ Deno.serve(async(req)=>{
   if(action==='accept'){if(!/^[a-f0-9]{64}$/.test(b.token||''))throw Error('Invalid invitation');b.token_hash=await sha256(b.token);delete b.token;}
   if(action==='project_put'){
    if(!b.package||b.package.format!=='agenetic/1'||b.package.kind!=='workflow')throw Error('Choose an Agenetic workflow package.');
+   if(new TextEncoder().encode(JSON.stringify(b.package)).byteLength>16000000)return json({error:'Team workflow packages can be up to 16 MB.'},413,origin);
    validateWorkflow(b.package.payload);b.name=String(b.package.name||'Shared project').slice(0,100);
   }
   if(action==='model_put')b.config=modelSetup(b.config);

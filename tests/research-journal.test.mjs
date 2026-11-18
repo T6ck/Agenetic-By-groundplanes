@@ -37,3 +37,23 @@ test('review backlog pauses new requests until a draft review is finished',()=>{
  const j=newJournal();j.enabled=true;for(let i=0;i<5;i++){const job=queueJob(j,task(String(i),String(i)));job.status='needs_review';}
  const queued=queueJob(j,task('next','next'));assert.equal(nextJob(j),null);j.jobs[0].status='completed';assert.equal(nextJob(j),queued);
 });
+test('follow-up approval survives interruption at the first write',()=>{
+ const j=newJournal();const child=queueJob(j,{...task(),parent:'previous'});
+ assert.equal(child.status,'proposed');
+ child.status='queued';recoverJournal(j);j.enabled=true;assert.equal(nextJob(j),null);
+ child.approvedAt=Date.now();child.status='queued';recoverJournal(j);j.enabled=true;assert.equal(nextJob(j),child);
+});
+test('archived drafts release review slots and restoring them restores the gate',async()=>{
+ const {reconcileReviews}=await import('../public/research-journal.mjs');
+ const j=newJournal();j.enabled=true;
+ const docs=Array.from({length:5},(_,i)=>({id:'note'+i,research:{state:'pending'}}));
+ j.jobs=docs.map(f=>({status:'needs_review',output:f.id}));
+ const waiting=queueJob(j,task('next'));
+ assert.equal(nextJob(j),null);docs[1].research.archived=true;reconcileReviews(j,docs);
+ assert.equal(nextJob(j),waiting);delete docs[1].research.archived;reconcileReviews(j,docs);assert.equal(nextJob(j),null);
+});
+test('changing the model or completion criteria allows a fresh comparison',()=>{
+ const j=newJournal();j.model='original';queueJob(j,task());j.model='new';
+ assert.ok(queueJob(j,task('next')));j.project={completion:'Compare conflicting results'};
+ assert.ok(queueJob(j,task('third')));assert.equal(queueJob(j,task('fourth')),null);
+});

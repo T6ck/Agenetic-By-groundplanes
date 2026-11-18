@@ -290,35 +290,45 @@ render=function() {
   }
   normalizeIcons();applyAppearance();
 };
-function moveGraphCamera(){
- const c=network.camera, world=$('.network-world');
- if(world)world.setAttribute('transform','translate('+c.x+' '+c.y+') scale('+c.scale+')');
+let graphPaintFrame = 0;
+function moveGraphCamera() {
+  const world = $('.network-world');
+  if (!world) return;
+  const {x, y, scale} = network.camera;
+  world.setAttribute('transform', 'translate('+x+' '+y+') scale('+scale+')');
+  world.style.setProperty('--label-scale', 1 / scale);
+  $('#network-zoom').textContent = Math.round(scale * 100) + '%';
+}
+function scheduleGraphPaint() {
+  if (graphPaintFrame) return;
+  graphPaintFrame = requestAnimationFrame(() => {
+    graphPaintFrame = 0;
+    moveGraphCamera();
+  });
 }
 function applyNetworkCamera() {
   const world=$('.network-world');if(!world)return;
   const c=network.camera;moveGraphCamera();
-  $('#network-zoom').textContent=Math.round(c.scale*100)+'%';
   $('.knowledge-svg').dataset.labels=network.labels;
   $('.network-edges').style.opacity=Math.min(.9,network.edgeOpacity*1.45);
-  for(const label of document.querySelectorAll('.knowledge-node text'))label.style.fontSize=(12/c.scale)+'px';
   $('.network-stage').style.setProperty('--grid-x',(c.x*.12)+'px');$('.network-stage').style.setProperty('--grid-y',(c.y*.12)+'px');
   placeNetworkLabels();
 }
 const graphLabelMetrics=new WeakMap();
+const graphLabelSlots=new WeakMap();
 function placeNetworkLabels() {
-  const scale=network.camera.scale;
+  const {scale,x:panX,y:panY}=network.camera;
   const groups=[...document.querySelectorAll('[data-knowledge-node]')];
   const viewport = $('.network-stage').getBoundingClientRect();
-  const camera = network.camera;
   const heading = document.querySelector('.network-context')?.getBoundingClientRect();
   const headingBoxes = heading ? [{
-    x: (heading.left - viewport.left - camera.x) / scale,
-    y: (heading.top - viewport.top - camera.y) / scale,
-    width: heading.width / scale,
-    height: heading.height / scale
+    x: heading.left - viewport.left,
+    y: heading.top - viewport.top,
+    width: heading.width,
+    height: heading.height
   }] : [];
-  // Partition in world coordinates so each candidate checks only neighboring objects.
-  const cell=128/scale, tiles=new Map();
+  // Labels, collision tiles and UI obstacles all use viewport pixels.
+  const cell=128, tiles=new Map();
   function visit(box,fn){
     const right=Math.floor((box.x+box.width)/cell),bottom=Math.floor((box.y+box.height)/cell);
     for(let x=Math.floor(box.x/cell);x<=right;x++)
@@ -330,30 +340,30 @@ function placeNetworkLabels() {
   headingBoxes.forEach(insert);
   for(const group of groups){
     const id=group.dataset.knowledgeNode,point=network.positions.get(id),r=Number(group.querySelector('.orb-body').getAttribute('r'));
-    insert({id,x:point[0]-r,y:point[1]-r,width:r*2,height:r*2});
+    insert({id,x:(point[0]-r)*scale+panX,y:(point[1]-r)*scale+panY,width:r*2*scale,height:r*2*scale});
   }
   const overlap=(a,b)=>a.x<b.x+b.width&&a.x+a.width>b.x&&a.y<b.y+b.height&&a.y+a.height>b.y;
   for(const group of groups) {
-    const id=group.dataset.knowledgeNode,[x,y]=network.positions.get(id),text=group.querySelector('text');
-    const r=Number(group.querySelector('.orb-body').getAttribute('r')),gap=12/scale;
-    const sx=x*scale+camera.x,sy=y*scale+camera.y;
-    if(sx < -96 || sy < -64 || sx > viewport.width+96 || sy > viewport.height+64){
+    const id=group.dataset.knowledgeNode,[worldX,worldY]=network.positions.get(id),text=group.querySelector('text');
+    const r=Number(group.querySelector('.orb-body').getAttribute('r'))*scale,gap=12;
+    const x=worldX*scale+panX,y=worldY*scale+panY;
+    if(x < -96 || y < -64 || x > viewport.width+96 || y > viewport.height+64){
       group.classList.add('label-collision');continue;
     }
     const state = text.querySelector('.node-state-label');
     const full = state && scale >= .8;
     const nameLength = text.firstChild?.textContent.length || 0;
     let metric=graphLabelMetrics.get(text);
-    if(!metric || metric.scale!==scale || metric.full!==!!full || metric.fontStatus!==document.fonts?.status){
-      metric={scale,full:!!full,fontStatus:document.fonts?.status,width:Math.max(nameLength?text.getSubStringLength(0,nameLength):0,full?state.getComputedTextLength():0)};
+    if(!metric || metric.full!==!!full || metric.fontStatus!==document.fonts?.status){
+      metric={full:!!full,fontStatus:document.fonts?.status,width:Math.max(nameLength?text.getSubStringLength(0,nameLength):0,full?state.getComputedTextLength():0)};
       graphLabelMetrics.set(text,metric);
     }
     const width=metric.width;
-    const height = (full ? 32 : 16) / scale;
-    const candidates=[{x:r+gap,y:4/scale},{x:-width/2,y:-r-gap},{x:-width/2,y:r+gap+height/2},{x:-r-gap-width,y:4/scale},...[-2,2,-3,3,-4,4,-5,5,-6,6].map(step=>({x:r+gap,y:step*height}))];
+    const height = full ? 32 : 16;
+    const candidates=[{x:r+gap,y:4},{x:-width/2,y:-r-gap},{x:-width/2,y:r+gap+height/2},{x:-r-gap-width,y:4},...[-2,2,-3,3,-4,4,-5,5,-6,6].map(step=>({x:r+gap,y:step*height}))];
     const cost=candidate=>{
-      const box={x:x+candidate.x-3/scale,y:y+candidate.y-13/scale,width:width+6/scale,height};
-      const c=camera;const outside=box.x*c.scale+c.x<16||(box.x+box.width)*c.scale+c.x>viewport.width-16||box.y*c.scale+c.y<16||(box.y+box.height)*c.scale+c.y>viewport.height-100;
+      const box={x:x+candidate.x-3,y:y+candidate.y-13,width:width+6,height};
+      const outside=box.x<16||box.x+box.width>viewport.width-16||box.y<16||box.y+box.height>viewport.height-100;
       let hits=outside?10:0;
       const checked=new Set();
       visit(box,key=>{
@@ -365,15 +375,22 @@ function placeNetworkLabels() {
       });
       return {box,hits};
     };
-    let selected=candidates[0],best=cost(selected);
-    for(const candidate of candidates.slice(1)){if(!best.hits)break;const result=cost(candidate);if(result.hits<best.hits){selected=candidate;best=result}if(!best.hits)break}
+    let slot=graphLabelSlots.get(group) ?? 0;
+    let best=cost(candidates[slot]);
+    for(let i=0;best.hits && i<candidates.length;i++){
+      if(i===slot)continue;
+      const result=cost(candidates[i]);
+      if(result.hits<best.hits){slot=i;best=result;}
+    }
+    graphLabelSlots.set(group,slot);
+    const selected=candidates[slot];
     text.setAttribute('x',selected.x);text.setAttribute('y',selected.y);
     if (state) {
       state.setAttribute('x', selected.x);
-      state.setAttribute('dy', 15 / scale);
+      state.setAttribute('dy', 15);
     }
     if(!best.hits)insert(best.box);
-    const tether=group.querySelector('.node-tether');if(tether){const tx=selected.x<0?selected.x+width/2:selected.x-4/scale,ty=selected.y-4/scale,d=Math.hypot(tx,ty)||1;tether.setAttribute('x1',tx/d*(r+4));tether.setAttribute('y1',ty/d*(r+4));tether.setAttribute('x2',tx);tether.setAttribute('y2',ty)}
+    const tether=group.querySelector('.node-tether');if(tether){const tx=selected.x<0?selected.x+width/2:selected.x-4,ty=selected.y-4,d=Math.hypot(tx,ty)||1;tether.setAttribute('x1',tx/d*(r+4));tether.setAttribute('y1',ty/d*(r+4));tether.setAttribute('x2',tx);tether.setAttribute('y2',ty)}
     group.classList.toggle('label-collision',best.hits>0);
   }
 }
@@ -407,7 +424,7 @@ function fitNetwork() {
 }
 function zoomNetwork(factor,x,y,continuous=false) {
   const c=network.camera,scale=Math.max(.04,Math.min(3,c.scale*factor));
-  network.camera={x:x-(x-c.x)*scale/c.scale,y:y-(y-c.y)*scale/c.scale,scale};if(continuous)moveGraphCamera();else applyNetworkCamera();
+  network.camera={x:x-(x-c.x)*scale/c.scale,y:y-(y-c.y)*scale/c.scale,scale};if(continuous)scheduleGraphPaint();else applyNetworkCamera();
 }
 function highlightNetwork() {
   const id=network.hovered||document.activeElement?.closest('[data-knowledge-node]')?.dataset.knowledgeNode||[...studio.selected][0];
@@ -542,7 +559,7 @@ document.addEventListener('pointermove',e=>{
       if(edge.dataset.source===d.id){edge.setAttribute('x1',p[0]);edge.setAttribute('y1',p[1])}
       if(edge.dataset.target===d.id){edge.setAttribute('x2',p[0]);edge.setAttribute('y2',p[1])}
     }
-  } else {network.camera.x=d.camera.x+dx;network.camera.y=d.camera.y+dy;moveGraphCamera()}
+  } else {network.camera.x=d.camera.x+dx;network.camera.y=d.camera.y+dy;scheduleGraphPaint()}
 });
 document.addEventListener('pointerup',()=>{
   const d=network.drag;network.drag=null;if(!d?.moved)return;
@@ -551,13 +568,24 @@ document.addEventListener('pointerup',()=>{
   applyNetworkCamera();persistNetwork();
 });
 document.addEventListener('wheel',e=>{
-  if(!e.target.closest('.knowledge-svg'))return;e.preventDefault();const b=$('.network-stage').getBoundingClientRect();
-  zoomNetwork(Math.exp(-e.deltaY*.001),e.clientX-b.left,e.clientY-b.top,true);
-  clearTimeout(network.cameraTimer);network.cameraTimer=setTimeout(()=>{if(inNetwork()){applyNetworkCamera();persistNetwork();}},120);
+  const svg=e.target.closest('.knowledge-svg');
+  if(!svg || !e.deltaY)return;
+  e.preventDefault();
+  const b=svg.getBoundingClientRect();
+  const unit=e.deltaMode===1?16:e.deltaMode===2?b.height:1;
+  const pixels=Math.max(-320,Math.min(320,e.deltaY*unit));
+  zoomNetwork(Math.exp(-pixels*.001),e.clientX-b.left,e.clientY-b.top,true);
+  // Navigation may replace the workspace before the throttled disk write.
+  activeSpace().graphCamera={...network.camera};
+  clearTimeout(network.cameraTimer);
+  network.cameraTimer=setTimeout(()=>{
+    if(svg.isConnected)applyNetworkCamera();
+    save().catch(report);
+  },150);
 },{passive:false});
 document.addEventListener('keydown',e=>{
   if(!document.body.classList.contains('knowledge-mode')||$('#dialog').open)return;
-  if(e.target.closest('input,textarea,select'))return;
+  if(e.ctrlKey||e.metaKey||e.altKey||e.target.closest('input,textarea,select,[contenteditable=true]'))return;
   if(e.key==='f'||e.key==='F'){e.preventDefault();e.stopImmediatePropagation();fitNetwork()}
   if(e.key==='Enter'&&e.target.closest('[data-knowledge-node]'))openNetworkNode(e.target.closest('[data-knowledge-node]').dataset.knowledgeNode).catch(report);
 },true);

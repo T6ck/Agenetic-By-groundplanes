@@ -1,8 +1,9 @@
 import {BUSINESS_API,AUTH_URL,PUBLISHABLE_KEY,paidAccess,escapeHtml as e,modelSetup} from './business-rules.mjs';
 let root,session,team='',state,view='team',busy=false;
 const pending=new Map();
+let loadNumber=0,teamList=[],refreshing=null;
 function billingLink(url){const u=new URL(url);if(u.protocol!=='https:'||!['checkout.stripe.com','billing.stripe.com'].includes(u.hostname))throw Error('Unexpected billing link.');const el=root.querySelector('[data-status]');el.replaceChildren();const a=document.createElement('a');a.href=u.href;a.target='_blank';a.rel='noopener noreferrer';a.textContent='Open secure Stripe confirmation';el.append(a);}
-const hasSubscription=t=>t&&t.status!=='unpaid'&&!['canceled','incomplete_expired'].includes(t.status);
+const hasSubscription=t=>t&&(t.has_subscription??(t.status!=='unpaid'))&&!['canceled','incomplete_expired'].includes(t.status);
 const key='agenetic.business.session';
 try{session=JSON.parse(sessionStorage.getItem(key)||'null');}catch{}
 // Reuse the Groundplanes account when this page is opened from the site.
@@ -12,11 +13,38 @@ if(invitation){sessionStorage.setItem('agenetic.pending-invite',invitation);hist
 invitation ||= sessionStorage.getItem('agenetic.pending-invite')||'';
 function status(s,bad=false){const el=root?.querySelector('[data-status]');if(el){el.textContent=s;el.setAttribute('role',bad?'alert':'status');}}
 async function auth(path,body){const r=await fetch(AUTH_URL+path,{method:'POST',headers:{apikey:PUBLISHABLE_KEY,'Content-Type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(20000)});let v;try{v=await r.json();}catch{throw Error('Sign-in returned an unreadable response. Please retry.');}if(!r.ok)throw Error(v.msg||v.error_description||'Sign-in failed.');return v;}
-async function token(){if(!session)throw Error('Sign in first.');if(session.device)return session.access_token;if(!session.expires_at||session.expires_at*1000<Date.now()+60000){session=await auth('/token?grant_type=refresh_token',{refresh_token:session.refresh_token});sessionStorage.setItem(key,JSON.stringify(session));}return session.access_token;}
-async function call(action,body={}){const requestKey=JSON.stringify({action,team,body});const requestId=pending.get(requestKey)||crypto.randomUUID();pending.set(requestKey,requestId);const r=await fetch(BUSINESS_API,{method:'POST',headers:{apikey:PUBLISHABLE_KEY,'Content-Type':'application/json',Authorization:'Bearer '+await token()},body:JSON.stringify({action,team_id:team,request_id:requestId,...body}),signal:AbortSignal.timeout(30000)});let v;try{v=await r.json();}catch{throw Error('The team service returned an unreadable response. Nothing was confirmed. Refresh before retrying.');}if(r.status<500)pending.delete(requestKey);if(!r.ok)throw Error(v.error||'Team service unavailable.');return Object.hasOwn(v,'result')?v.result:v;}
+async function token(){
+ const account=session;
+ if(!account)throw Error('Sign in first.');
+ if(account.device||account.expires_at*1000>=Date.now()+60000)return account.access_token;
+ if(refreshing?.account===account)return refreshing.promise;
+ const promise=auth('/token?grant_type=refresh_token',{refresh_token:account.refresh_token}).then(next=>{
+  if(session!==account)throw Error('Your sign-in changed. Please try again.');
+  session=next;sessionStorage.setItem(key,JSON.stringify(next));return next.access_token;
+ }).finally(()=>{if(refreshing?.account===account)refreshing=null});
+ refreshing={account,promise};return promise;
+}
+async function call(action,body={},teamId=team){const requestKey=JSON.stringify({action,team:teamId,body});const requestId=pending.get(requestKey)||crypto.randomUUID();pending.set(requestKey,requestId);const r=await fetch(BUSINESS_API,{method:'POST',headers:{apikey:PUBLISHABLE_KEY,'Content-Type':'application/json',Authorization:'Bearer '+await token()},body:JSON.stringify({action,team_id:teamId,request_id:requestId,...body}),signal:AbortSignal.timeout(30000)});let v;try{v=await r.json();}catch{throw Error('The team service returned an unreadable response. Nothing was confirmed. Refresh before retrying.');}if(r.status<500)pending.delete(requestKey);if(!r.ok)throw Error(v.error||'Team service unavailable.');return Object.hasOwn(v,'result')?v.result:v;}
 function shell(content){root.innerHTML='<header><div><small>AGENETIC BY GROUNDPLANES</small><h1>Work together. Keep control.</h1></div><a class="business-link" href="https://groundplanes.com">Groundplanes</a></header><p>Personal research stays free. Team features share only the projects and model setup you explicitly choose.</p><div data-status role="status" aria-live="polite"></div>'+content;bind();}
 function login(){shell('<section><h2>Your business account</h2><p>Use your Groundplanes account. This is separate from your local profile and community sign-in.</p><form data-form="login"><label>Email<input name="email" type="email" autocomplete="username" required></label><label>Password<input name="password" type="password" autocomplete="current-password" required></label><button type="submit">Sign in</button></form><p><a href="https://groundplanes.com/dashboard">Create an account or reset your password</a></p></section><details><summary>Connect with a device key</summary><form data-form="device"><label>Team ID<input name="team" required></label><label>Device key<input name="key" type="password" required autocomplete="off"></label><button type="submit">Connect device</button></form></details>');}
-async function load(){if(!session)return login();shell('<p>Loading your teams…</p>');try{const teams=session.device?[{id:session.team_id,name:'Connected team'}]:await call('teams');if(!teams.some(t=>t.id===team))team=teams[0]?.id||'';state=team?await call('status'):null;render(teams);}catch(err){login();status(err.message,true);}}
+async function load(){
+ const version=++loadNumber,requestedTeam=team;
+ state=null;teamList=[];
+ if(!session)return login();
+ shell('<p role="status">Loading your teams…</p>');
+ try{
+  const teams=session.device?[{id:session.team_id,name:'Connected team'}]:await call('teams');
+  if(version!==loadNumber)return;
+  const selected=teams.some(t=>t.id===requestedTeam)?requestedTeam:(teams[0]?.id||'');
+  const result=selected?await call('status',{},selected):null;
+  if(version!==loadNumber)return;
+  team=selected;state=result;teamList=teams;render(teams);
+ }catch(err){
+  if(version!==loadNumber)return;
+  shell('<p>Team information could not be loaded.</p><button data-action="refresh">Try again</button> <button data-action="logout">Sign out</button>');
+  status(err.message,true);
+ }
+}
 function render(teams){const t=state?.team,admin=['owner','admin'].includes(state?.role),owner=state?.role==='owner',active=paidAccess(t),used=state?.members?.length||0;
  let content='<div class="business-actions"><label>Team<select data-team><option value="">Choose a team</option>'+teams.map(t=>'<option value="'+e(t.id)+'" '+(t.id===team?'selected':'')+'>'+e(t.name)+'</option>').join('')+'</select></label><button data-action="new-team" '+(session.device?'hidden':'')+'>New team</button><button data-action="refresh">Refresh</button><button data-action="logout">Sign out</button></div>';
  if(invitation)content+='<section><h2>Team invitation</h2><p>Accepting joins the team using the email you signed in with. No personal files are uploaded.</p><button data-action="accept">Accept invitation</button></section>';
@@ -36,11 +64,11 @@ function render(teams){const t=state?.team,admin=['owner','admin'].includes(stat
 }
 function download(name,content,type='application/json'){const a=document.createElement('a'),url=URL.createObjectURL(new Blob([content],{type}));a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 async function confirmAction(title,detail){return new Promise(resolve=>{const d=document.createElement('dialog');d.className='business';d.innerHTML='<h2>'+e(title)+'</h2><p>'+e(detail)+'</p><div class="business-actions"><button data-no>Cancel</button><button data-yes>Confirm</button></div>';document.body.append(d);d.showModal();const done=v=>{d.close();d.remove();resolve(v);};d.querySelector('[data-no]').onclick=()=>done(false);d.querySelector('[data-yes]').onclick=()=>done(true);d.oncancel=ev=>{ev.preventDefault();done(false);};});}
-function bind(){root.onchange=ev=>{if(ev.target.matches('[data-team]')){team=ev.target.value;load();}};root.onclick=async ev=>{const b=ev.target.closest('button');if(!b||busy)return;try{busy=true;b.disabled=true;
- if(b.dataset.view){view=b.dataset.view;await load();return;}
+function bind(){root.onchange=ev=>{if(ev.target.matches('[data-team]')){if(busy){ev.target.value=team;return}team=ev.target.value;view='team';load();}};root.onclick=async ev=>{const b=ev.target.closest('button');if(!b||busy||b.type==='submit'&&b.form)return;try{busy=true;b.disabled=true;
+ if(b.dataset.view){view=b.dataset.view;render(teamList);root.querySelector('[data-view="'+view+'"]')?.focus();return;}
  const a=b.dataset.action;if(a==='refresh')await load();
- if(a==='logout'){try{if(!session.device)await fetch(AUTH_URL+'/logout',{method:'POST',headers:{apikey:PUBLISHABLE_KEY,Authorization:'Bearer '+await token()}});}catch{}session=null;sessionStorage.removeItem(key);localStorage.removeItem('sb-tejsbytmtcdzvgzlpkgp-auth-token');team='';login();}
- if(a==='new-team'){shell('<form data-form="new-team"><h2>Create a business team</h2><label>Team name<input name="name" maxlength="100" required></label><button type="submit">Create team</button></form>');}
+ if(a==='logout'){try{if(!session.device)await fetch(AUTH_URL+'/logout',{method:'POST',signal:AbortSignal.timeout(10000),headers:{apikey:PUBLISHABLE_KEY,Authorization:'Bearer '+await token()}});}catch{}loadNumber++;session=null;teamList=[];state=null;view='team';pending.clear();sessionStorage.removeItem(key);localStorage.removeItem('sb-tejsbytmtcdzvgzlpkgp-auth-token');team='';login();}
+ if(a==='new-team'){shell('<form data-form="new-team"><h2>Create a business team</h2><label>Team name<input name="name" maxlength="100" required></label><button type="submit">Create team</button> <button type="button" data-action="refresh">Cancel</button></form>');}
  if(a==='accept'){await call('accept',{token:invitation});invitation='';sessionStorage.removeItem('agenetic.pending-invite');await load();status('Invitation accepted.');}
  if(['remove','revoke-invite','revoke-key'].includes(a)&&await confirmAction('Confirm access change','This will revoke access. Downloaded copies already held by a member cannot be remotely erased.')){await call({remove:'remove','revoke-invite':'revoke_invite','revoke-key':'key_revoke'}[a],{id:b.dataset.id,user_id:b.dataset.id});await load();}
  if(a==='portal'){const v=await call('portal');billingLink(v.url);}
@@ -60,6 +88,6 @@ function bind(){root.onchange=ev=>{if(ev.target.matches('[data-team]')){team=ev.
  if(kind==='model'){const c=Object.fromEntries(f);for(const k of ['context','threads','gpuLayers'])c[k]=Number(c[k]);await call('model_put',{config:modelSetup(c),revision:state.model_setup?.revision||0});await load();status('Shared model setup saved.');}
  if(kind==='support'){if(!await confirmAction('Send this support request?',String(f.get('subject'))+' — '+String(f.get('body'))))return;const v=await call('support',{subject:f.get('subject'),body:f.get('body')});form.reset();status('Request '+v.id+' received. A confirmation email is queued.');}
  }catch(err){status(err.message,true);}finally{busy=false;const b=form.querySelector('button[type=submit]');if(b)b.disabled=false;}};}
-export function showBusiness(element){root=element;load();}
+export function showBusiness(element){if(!element||element===root)return;root=element;load();}
 window.showAgeneticBusiness=showBusiness;
 if(document.getElementById('business-root'))showBusiness(document.getElementById('business-root'));

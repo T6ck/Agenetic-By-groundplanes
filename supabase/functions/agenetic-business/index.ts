@@ -1,3 +1,5 @@
+import {checkoutConflict} from './checkout.mjs';
+import {readTeamRequest} from './request.mjs';
 import Stripe from 'npm:stripe@23.1.0';
 import {createClient} from 'npm:@supabase/supabase-js@2.112.4';
 import {PRICES,seatCount,emailAddress,modelSetup,sha256} from './rules.mjs';
@@ -11,13 +13,14 @@ Deno.serve(async(req)=>{
  const origin=req.headers.get('origin')||'';if(origin&&!allowed.has(origin))return json({error:'Origin not allowed'},403);
  if(req.method==='OPTIONS')return json({},200,origin);if(req.method!=='POST')return json({error:'POST required'},405,origin);
  try {
-  if(Number(req.headers.get('content-length')||0)>16100000)return json({error:'Team workflow requests can be up to 16 MB.'},413,origin);
-  const raw=await req.text(),bytes=new TextEncoder().encode(raw).byteLength;
-  if(bytes>16100000)return json({error:'Team workflow requests can be up to 16 MB.'},413,origin);
-  const b=JSON.parse(raw),action=b.action;delete b.action;
-  if(action!=='project_put' && bytes>1100000)return json({error:'Request exceeds 1 MB'},413,origin);
-  let uid:string|undefined,deviceTeam:string|undefined;
   const token=(req.headers.get('authorization')||'').replace(/^Bearer /,'');
+  if(!token)return json({error:'Sign in with a verified business account.'},401,origin);
+  let b;
+  try{b=await readTeamRequest(req)}catch(error){
+   return json({error:error instanceof Error?error.message:'Invalid request.'},error instanceof RangeError?413:400,origin);
+  }
+  const action=b.action;delete b.action;
+  let uid:string|undefined,deviceTeam:string|undefined;
   if(token.startsWith('agk_')){
    const k=await db.from('agenetic_keys').select('user_id,team_id').eq('key_hash',await sha256(token)).is('revoked_at',null).gt('expires_at',new Date().toISOString()).maybeSingle();
    uid=k.data?.user_id;deviceTeam=k.data?.team_id;
@@ -68,7 +71,7 @@ Deno.serve(async(req)=>{
     return json({url:session.url},200,origin);
    }
    if(ctx.subscription_id&&!['canceled','incomplete_expired'].includes(ctx.status))throw Error('This team already has a subscription. Use Manage billing.');
-   const quantity=seatCount(b.seats),price=PRICES[b.interval];if(!price)throw Error('Choose monthly or yearly billing.');
+   const quantity=seatCount(b.seats),price=Object.hasOwn(PRICES,b.interval)?PRICES[b.interval]:null;if(!price)throw Error('Choose monthly or yearly billing.');
    const regs=await stripe.tax.registrations.list({status:'active',limit:1});if(!regs.data.length)return json({error:'Commercial checkout is awaiting the billing tax setup. Contact hello@groundplanes.com.'},503,origin);
    let customer=ctx.customer_id;
    if(!customer){
@@ -78,11 +81,24 @@ Deno.serve(async(req)=>{
    const existing=await stripe.subscriptions.list({customer,status:'all',limit:100});
    if(existing.data.some(s=>!['canceled','incomplete_expired'].includes(s.status)))throw Error('A subscription already exists. Wait for confirmation or contact support.');
    const pending=await stripe.checkout.sessions.list({customer,status:'open',limit:1});
-   if(pending.data[0]?.url)return json({url:pending.data[0].url},200,origin);
+   const openSession=pending.data[0];
+   if(openSession){
+    if(openSession.mode!=='subscription'||openSession.client_reference_id!==ctx.id||!openSession.url)
+     return json({error:'Another checkout is open for this customer. Refresh billing after it closes.'},409,origin);
+    const items=await stripe.checkout.sessions.listLineItems(openSession.id,{limit:2});
+    const conflict=checkoutConflict(items,price,quantity,openSession.expires_at);
+    if(conflict)return json({error:conflict},409,origin);
+    return json({url:openSession.url},200,origin);
+   }
    const s=await stripe.checkout.sessions.create({mode:'subscription',customer,line_items:[{price,quantity}],customer_update:{address:'auto'},billing_address_collection:'required',tax_id_collection:{enabled:true},automatic_tax:{enabled:true},client_reference_id:ctx.id,integration_identifier:'agenetic-teams-groundpln',success_url:'https://groundplanes.com/team.html?checkout=complete',cancel_url:'https://groundplanes.com/team.html?checkout=cancelled'}, {idempotencyKey:'agenetic-checkout:'+uid+':'+b.request_id});
    return json({url:s.url},200,origin);
   }
   const result=await command(uid,action,b);
+  if(action==='status'&&result.role==='owner'&&!deviceTeam){
+   const {data:billing,error}=await db.from('agenetic_teams').select('subscription_id').eq('id',result.team.id).single();
+   if(error)throw Error('Could not load team billing status.');
+   result.team.has_subscription=!!billing.subscription_id;
+  }
   if(deviceTeam&&action==='status'){result.role='member';result.invites=[];result.keys=[];result.mail_pending=0;result.members=result.members.map((m:any)=>({user_id:m.user_id,role:m.role}));}
   return json({result},200,origin);
  }catch(e){const message=e instanceof Stripe.errors.StripeError?'Billing request failed. Please retry or contact support.':e instanceof Error?e.message:'Request failed';return json({error:message.startsWith('Invalid API')?'Billing configuration unavailable.':message},400,origin);}

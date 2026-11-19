@@ -70,11 +70,17 @@ studioLinks=function() {
     const key=fileNameKey(node.name);
     names.set(key,names.has(key)?null:node.id);
   }
+  const targetsBySource = new Map();
+  for (const {from,to} of links) {
+    if (!targetsBySource.has(from)) targetsBySource.set(from,new Set());
+    targetsBySource.get(from).add(to);
+  }
   for(const file of data.files) {
     if(!ids.has(file.id)||!file.text)continue;
+    const targets=targetsBySource.get(file.id)||new Set();
     for(const match of file.text.matchAll(/\[\[([^\]\n]+)\]\]/g)) {
       const target=names.get(fileNameKey(match[1].split('|')[0].split('#')[0]));
-      if(target&&target!==file.id&&ids.has(target)&&!links.some(l=>l.from===file.id&&l.to===target))links.push({from:file.id,to:target,kind:'wikilink'});
+      if(target&&target!==file.id&&!targets.has(target)){targets.add(target);links.push({from:file.id,to:target,kind:'wikilink'});}
     }
   }
   return links;
@@ -243,11 +249,23 @@ function calculateNetwork(force=false) {
 function networkButton(action,label,key='',extra='') {
   return '<button type="button" data-network="'+action+'" data-key="'+esc(key)+'" '+extra+'>'+label+'</button>';
 }
-function degreeFor(id,links) { return links.filter(l=>l.from===id||l.to===id).length; }
+const graphDegrees = new WeakMap();
+function degreeFor(id,links) {
+  let counts=graphDegrees.get(links);
+  if (!counts) {
+    counts=new Map();
+    for (const {from,to} of links) {
+      counts.set(from,(counts.get(from)||0)+1);
+      if (from!==to) counts.set(to,(counts.get(to)||0)+1);
+    }
+    graphDegrees.set(links,counts);
+  }
+  return counts.get(id)||0;
+}
 function networkNode(n,links) {
   const position=network.positions.get(n.id)||[0,0];
   const radius=(9+Math.min(11,Math.sqrt(degreeFor(n.id,links))*2.5))*network.nodeScale;
-  return '<g class="knowledge-node '+n.kind+(studio.selected.has(n.id)?' selected':'')+(n.sample?' sample-node':'')+'" data-knowledge-node="'+esc(n.id)+'" transform="translate('+position.join(' ')+')" tabindex="0" role="button" aria-label="Open '+esc(n.name)+'"><title>'+esc(n.name)+'</title><circle class="node-hit" r="'+Math.max(24,radius+10)+'"/><circle class="node-ring" r="'+(radius+7)+'"/><circle class="orb-body" r="'+radius+'" fill="url(#orb-'+n.kind+')"/><circle class="orb-reflection" r="'+(radius-.5)+'" fill="url(#orb-reflection)"/><circle class="orb-outline" r="'+radius+'" fill="none" stroke="url(#orb-rim)"/>'+nodeSignature(n,radius)+'<text x="'+(radius+13)+'" y="4">'+esc(n.name.replace(/\.md$/,''))+'</text></g>';
+  return '<g class="knowledge-node '+n.kind+(studio.selected.has(n.id)?' selected':'')+(n.sample?' sample-node':'')+'" data-knowledge-node="'+esc(n.id)+'" transform="translate('+position.join(' ')+')" tabindex="-1" role="button" aria-label="Open '+esc(n.name)+'"><title>'+esc(n.name)+'</title><circle class="node-hit" r="'+Math.max(24,radius+10)+'"/><circle class="node-ring" r="'+(radius+7)+'"/><circle class="orb-body" r="'+radius+'" fill="url(#orb-'+n.kind+')"/><circle class="orb-reflection" r="'+(radius-.5)+'" fill="url(#orb-reflection)"/><circle class="orb-outline" r="'+radius+'" fill="none" stroke="url(#orb-rim)"/>'+nodeSignature(n,radius)+'<text x="'+(radius+13)+'" y="4">'+esc(n.name.replace(/\.md$/,''))+'</text></g>';
 }
 
 function renderNetwork() {
@@ -270,7 +288,7 @@ function renderNetwork() {
     const items=explorerNodes.filter(n=>n.kind===kind);if(!items.length)return '';
     return '<details data-explorer-kind="'+kind+'" '+(space.explorerClosed?.includes(kind)?'':'open')+'><summary>'+({file:'Notes and sources',agent:'Agents',task:'Tasks',model:'Models'}[kind])+'<span>'+items.length+'</span></summary>'+items.map(n=>networkButton('open',lineIcon({file:'note',agent:'agent',task:'task',model:'model'}[kind])+'<span>'+esc(n.name)+'</span>'+(n.research?'<small class="research-state">'+esc(researchStateLabel(n))+'</small>':''),n.id,'class="'+(studio.selected.has(n.id)?'selected':'')+'"')).join('')+'</details>';
   }).join('')+(!explorerNodes.length&&query?'<p role="status">No matching items in this workspace.</p>':'')+'</div><div class="knowledge-explorer-footer">'+studioButton('import',lineIcon('folder')+'Import files')+studioButton('runtime',lineIcon('model')+'Local models')+networkButton('example',lineIcon('graph')+'Explore example space')+'</div></aside>'+
-  '<main class="network-stage" tabindex="-1" aria-label="Knowledge graph"><div class="grid-field" aria-hidden="true"></div><div class="network-context"><span>'+ (selected?'LOCAL GRAPH':'KNOWLEDGE GRAPH')+'</span><h1>'+esc(selected?selected.name.replace(/\.md$/,''):space.name)+'</h1><p id="graph-count">'+nodes.length+' nodes <span>·</span> '+links.length+' connections'+(nodes.length!==spaceNodes().length?' · '+(spaceNodes().length-nodes.length)+' hidden by this view':'')+'</p>'+(selected?'<div class="depth-control">'+networkButton('depth','1 hop','1','class="'+(network.depth===1?'active':'')+'"')+networkButton('depth','2 hops','2','class="'+(network.depth===2?'active':'')+'"')+networkButton('all','Clear focus')+'</div>':'')+'</div><svg class="knowledge-svg" aria-label="Notes, agents, and workflow relationships">'+orbDefinitions()+'<g class="network-world"><g class="network-edges">'+links.map(l=>{const a=network.positions.get(l.from),b=network.positions.get(l.to);return '<line class="knowledge-edge '+l.kind+'" data-source="'+esc(l.from)+'" data-target="'+esc(l.to)+'" x1="'+a[0]+'" y1="'+a[1]+'" x2="'+b[0]+'" y2="'+b[1]+'"/>'}).join('')+'</g><g class="network-nodes">'+nodes.map(n=>networkNode(n,links)).join('')+'</g></g></svg>'+
+  '<main class="network-stage" tabindex="-1" aria-label="Knowledge graph"><div class="grid-field" aria-hidden="true"></div><div class="network-context"><span>'+ (selected?'LOCAL GRAPH':'KNOWLEDGE GRAPH')+'</span><h1>'+esc(selected?selected.name.replace(/\.md$/,''):space.name)+'</h1><p id="graph-count">'+nodes.length+' nodes <span>·</span> '+links.length+' connections'+(nodes.length!==spaceNodes().length?' · '+(spaceNodes().length-nodes.length)+' hidden by this view':'')+'</p>'+(selected?'<div class="depth-control">'+networkButton('depth','1 hop','1','class="'+(network.depth===1?'active':'')+'"')+networkButton('depth','2 hops','2','class="'+(network.depth===2?'active':'')+'"')+networkButton('all','Clear focus')+'</div>':'')+'</div><svg class="knowledge-svg" role="group" aria-label="Workspace graph. Use arrow keys to move between items. Press Enter or Space to open an item.">'+orbDefinitions()+'<g class="network-world"><g class="network-edges">'+links.map(l=>{const a=network.positions.get(l.from),b=network.positions.get(l.to);return '<line class="knowledge-edge '+l.kind+'" data-source="'+esc(l.from)+'" data-target="'+esc(l.to)+'" x1="'+a[0]+'" y1="'+a[1]+'" x2="'+b[0]+'" y2="'+b[1]+'"/>'}).join('')+'</g><g class="network-nodes">'+nodes.map(n=>networkNode(n,links)).join('')+'</g></g></svg>'+
   (!nodes.length?'<div class="graph-empty"><h2>'+ (spaceNodes().length?'Nothing matches this view':'Add your first source')+'</h2><p>'+(spaceNodes().length?'Try another search or restore your filters.':'Drop your files into this space, write a note, or explore the example. Connections appear as you link real material.')+'</p>'+(spaceNodes().length?networkButton('reset','Reset filters'):studioButton('import','Import files')+studioButton('note','Write a note')+networkButton('example','Explore example'))+'</div>':'')+
   '<div class="edge-key" aria-label="Relationship legend"><span><i></i>Reference / wiki link</span><span><i></i>Context / assignment / model</span></div><div class="network-footer"><div class="type-filters" aria-label="Filter node types">'+['file','agent','task','model'].map(kind=>networkButton('type','<i class="type-dot '+kind+'"></i>'+({file:'Notes and sources',agent:'Agents',task:'Tasks',model:'Models'}[kind]),kind,'aria-pressed="'+network.types.has(kind)+'"')).join('')+'</div><div class="graph-navigation">'+networkButton('zoom-out',lineIcon('minus'),'','aria-label="Zoom out"')+'<span id="network-zoom"></span>'+networkButton('zoom-in',lineIcon('plus'),'','aria-label="Zoom in"')+networkButton('fit',lineIcon('fit')+'<span>Center</span>','','title="Center visible nodes · F"')+
   networkButton('arrange',lineIcon('canvas')+'<span>Organize</span>','','title="Organize visible nodes by connections"')+
@@ -426,15 +444,60 @@ function zoomNetwork(factor,x,y,continuous=false) {
   const c=network.camera,scale=Math.max(.04,Math.min(3,c.scale*factor));
   network.camera={x:x-(x-c.x)*scale/c.scale,y:y-(y-c.y)*scale/c.scale,scale};if(continuous)scheduleGraphPaint();else applyNetworkCamera();
 }
-function highlightNetwork() {
-  const id=network.hovered||document.activeElement?.closest('[data-knowledge-node]')?.dataset.knowledgeNode||[...studio.selected][0];
-  const connected=new Set([id]);
-  for(const l of studioLinks())if(l.from===id||l.to===id){connected.add(l.from);connected.add(l.to)}
-  for(const node of document.querySelectorAll('[data-knowledge-node]')) {
-    node.classList.toggle('dimmed',!!id&&!connected.has(node.dataset.knowledgeNode));
-    node.classList.toggle('selected',studio.selected.has(node.dataset.knowledgeNode));
+// Index only the visible projection. Graph gestures never need to parse source notes.
+let graphElements;
+function indexedGraph(svg) {
+  const first=svg.querySelector('.network-nodes')?.firstElementChild;
+  if (graphElements?.svg===svg && graphElements.first===first) return graphElements;
+  const nodes=new Map(), edges=new Map();
+  for (const node of svg.querySelectorAll('[data-knowledge-node]')) {
+    nodes.set(node.dataset.knowledgeNode,node);
+    edges.set(node.dataset.knowledgeNode,[]);
   }
-  for(const edge of document.querySelectorAll('.knowledge-edge'))edge.classList.toggle('related',!!id&&(edge.dataset.source===id||edge.dataset.target===id));
+  for (const edge of svg.querySelectorAll('.knowledge-edge')) {
+    const {source,target}=edge.dataset;
+    edges.get(source)?.push(edge);
+    if(source!==target) edges.get(target)?.push(edge);
+  }
+  const tabId=[...studio.selected].find(key=>nodes.has(key))||(nodes.has(graphElements?.tabId)?graphElements.tabId:nodes.keys().next().value);
+  for(const [key,node] of nodes){
+    node.setAttribute('tabindex',key===tabId?'0':'-1');
+    node.setAttribute('aria-pressed',String(studio.selected.has(key)));
+  }
+  graphElements={svg,first,nodes,edges,tabId,lit:new Set(),selected:new Set(studio.selected),id:null};
+  return graphElements;
+}
+function highlightNetwork() {
+  const svg=$('.knowledge-svg');
+  if(!svg)return;
+  const graph=indexedGraph(svg);
+  const focused=document.activeElement?.closest('[data-knowledge-node]')?.dataset.knowledgeNode;
+  const inspected=studio.inspector?[...studio.selected][0]:null;
+  const keyboard=document.activeElement?.matches(':focus-visible')?focused:null;
+  const id=[keyboard,inspected,network.hovered,focused,...studio.selected].find(id=>graph.nodes.has(id))||null;
+  const tabId=focused||inspected;
+  if(tabId&&graph.nodes.has(tabId)&&tabId!==graph.tabId){
+    graph.nodes.get(graph.tabId)?.setAttribute('tabindex','-1');
+    graph.nodes.get(tabId).setAttribute('tabindex','0');graph.tabId=tabId;
+  }
+  for(const key of graph.selected)if(!studio.selected.has(key)){const el=graph.nodes.get(key);el?.classList.remove('selected');el?.setAttribute('aria-pressed','false');}
+  for(const key of studio.selected)if(!graph.selected.has(key)){const el=graph.nodes.get(key);el?.classList.add('selected');el?.setAttribute('aria-pressed','true');}
+  graph.selected=new Set(studio.selected);
+  svg.classList.toggle('has-node-highlight',!!id);
+  if(graph.id===id)return;
+  for(const element of graph.lit)element.classList.remove('graph-neighbor','related');
+  graph.lit.clear();
+  if(id){
+    for(const edge of graph.edges.get(id)){
+      const other=graph.nodes.get(edge.dataset.source===id?edge.dataset.target:edge.dataset.source);
+      if(other)graph.lit.add(other);
+      edge.classList.add('related');
+    }
+    graph.lit.add(graph.nodes.get(id));
+    for(const node of graph.lit)node.classList.add('graph-neighbor');
+    for(const edge of graph.edges.get(id))graph.lit.add(edge);
+  }
+  graph.id=id;
 }
 async function openNetworkNode(id) {
   if(!await saveEditor())return;
@@ -543,30 +606,37 @@ document.addEventListener('input',async e=>{
   if(e.target.id==='graph-edges'){network.edgeOpacity=Number(e.target.value);applyNetworkCamera();persistNetwork()}
 });
 document.addEventListener('change',e=>{if(e.target.id==='graph-labels'){network.labels=e.target.value;applyNetworkCamera();persistNetwork()}});
-document.addEventListener('pointerover',e=>{const node=e.target.closest('[data-knowledge-node]');if(node){network.hovered=node.dataset.knowledgeNode;highlightNetwork()}});
+document.addEventListener('pointerover',e=>{const node=e.target.closest('[data-knowledge-node]');if(node&&network.hovered!==node.dataset.knowledgeNode){network.hovered=node.dataset.knowledgeNode;highlightNetwork()}});
 document.addEventListener('pointerout',e=>{const node=e.target.closest('[data-knowledge-node]');if(node&&!node.contains(e.relatedTarget)){network.hovered=null;highlightNetwork()}});
 document.addEventListener('pointerdown',e=>{
-  if(!e.target.closest('.knowledge-svg')||e.button!==0||studio.connecting)return;
+  const svg=e.target.closest('.knowledge-svg');
+  if(!svg||e.button!==0||!e.isPrimary||studio.connecting)return;
   const node=e.target.closest('[data-knowledge-node]'),id=node?.dataset.knowledgeNode;
-  network.drag={id,x:e.clientX,y:e.clientY,camera:{...network.camera},position:id?[...network.positions.get(id)]:null,moved:false};
+  network.drag={id,svg,pointerId:e.pointerId,x:e.clientX,y:e.clientY,camera:{...network.camera},position:id?[...network.positions.get(id)]:null,moved:false};
 });
 document.addEventListener('pointermove',e=>{
-  const d=network.drag;if(!d)return;const dx=e.clientX-d.x,dy=e.clientY-d.y;if(!d.moved&&Math.hypot(dx,dy)<4)return;d.moved=true;
+  const d=network.drag;if(!d||d.pointerId!==e.pointerId)return;
+  if(!d.svg.isConnected){network.drag=null;return}
+  const dx=e.clientX-d.x,dy=e.clientY-d.y;if(!d.moved&&Math.hypot(dx,dy)<4)return;
+  if(!d.moved){d.moved=true;if(d.svg.hasPointerCapture&&d.svg.isConnected&&e.buttons===1)d.svg.setPointerCapture(e.pointerId)}
   if(d.id) {
     const p=[d.position[0]+dx/d.camera.scale,d.position[1]+dy/d.camera.scale];network.positions.set(d.id,p);
-    for(const node of document.querySelectorAll('[data-knowledge-node]'))if(node.dataset.knowledgeNode===d.id)node.setAttribute('transform','translate('+p.join(' ')+')');
-    for(const edge of document.querySelectorAll('.knowledge-edge')) {
+    const graph=indexedGraph(d.svg);
+    graph.nodes.get(d.id)?.setAttribute('transform','translate('+p.join(' ')+')');
+    for(const edge of graph.edges.get(d.id)||[]) {
       if(edge.dataset.source===d.id){edge.setAttribute('x1',p[0]);edge.setAttribute('y1',p[1])}
       if(edge.dataset.target===d.id){edge.setAttribute('x2',p[0]);edge.setAttribute('y2',p[1])}
     }
   } else {network.camera.x=d.camera.x+dx;network.camera.y=d.camera.y+dy;scheduleGraphPaint()}
 });
-document.addEventListener('pointerup',()=>{
-  const d=network.drag;network.drag=null;if(!d?.moved)return;
+function endGraphGesture(event){
+  const d=network.drag;if(!d||d.pointerId!==event.pointerId)return;
+  network.drag=null;if(!d.moved||!d.svg.isConnected)return;
   network.ignoreClick=true;setTimeout(()=>network.ignoreClick=false,100);
   if(d.id)activeSpace().graphPositions=Object.fromEntries(network.positions);
   applyNetworkCamera();persistNetwork();
-});
+}
+for(const type of ['pointerup','pointercancel','lostpointercapture'])document.addEventListener(type,endGraphGesture);
 document.addEventListener('wheel',e=>{
   const svg=e.target.closest('.knowledge-svg');
   if(!svg || !e.deltaY)return;
@@ -583,11 +653,44 @@ document.addEventListener('wheel',e=>{
     save().catch(report);
   },150);
 },{passive:false});
+function moveGraphFocus(node,key){
+  const graph=indexedGraph(node.closest('.knowledge-svg'));
+  const id=node.dataset.knowledgeNode,[x,y]=network.positions.get(id);
+  let target;
+  if(key==='Home')target=graph.nodes.keys().next().value;
+  else if(key==='End')target=Array.from(graph.nodes.keys()).at(-1);
+  else{
+    const [horizontal,vertical]={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}[key];
+    let best=Infinity;
+    for(const id of graph.nodes.keys()){
+      const point=network.positions.get(id);if(!point)continue;
+      const dx=point[0]-x,dy=point[1]-y;
+      const along=dx*horizontal+dy*vertical,across=Math.abs(dx*vertical-dy*horizontal);
+      if(along<=0)continue;
+      const score=Math.hypot(dx,dy)+2*across;
+      if(score<best){best=score;target=id}
+    }
+  }
+  if(!target)return;
+  const next=graph.nodes.get(target);
+  next.focus({preventScroll:true});
+  // Keep the keyboard cursor visible without disturbing scale or saved node positions.
+  const [tx,ty]=network.positions.get(target),c=network.camera,box=graph.svg.getBoundingClientRect();
+  const px=tx*c.scale+c.x,py=ty*c.scale+c.y;
+  const margin=32;
+  if(px<margin||py<margin||px>box.width-margin||py>box.height-margin){
+    c.x+=box.width/2-px;c.y+=box.height/2-py;applyNetworkCamera();persistNetwork();
+  }
+}
 document.addEventListener('keydown',e=>{
-  if(!document.body.classList.contains('knowledge-mode')||$('#dialog').open)return;
+  if(!document.body.classList.contains('knowledge-mode')||document.querySelector('dialog[open]'))return;
   if(e.ctrlKey||e.metaKey||e.altKey||e.target.closest('input,textarea,select,[contenteditable=true]'))return;
   if(e.key==='f'||e.key==='F'){e.preventDefault();e.stopImmediatePropagation();fitNetwork()}
-  if(e.key==='Enter'&&e.target.closest('[data-knowledge-node]'))openNetworkNode(e.target.closest('[data-knowledge-node]').dataset.knowledgeNode).catch(report);
+  const node=e.target.closest('[data-knowledge-node]');
+  if(node&&['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End'].includes(e.key)){
+    e.preventDefault();e.stopImmediatePropagation();moveGraphFocus(node,e.key);return;
+  }
+  if(node&&(e.key==='Enter'||e.key===' ')){e.preventDefault();e.stopImmediatePropagation();if(!e.repeat)openNetworkNode(node.dataset.knowledgeNode).catch(report);}
 },true);
 
 

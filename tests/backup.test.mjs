@@ -3,3 +3,15 @@ const profile={profile:{id:'p',name:'Vault'},files:[{id:'f',name:'Evidence',text
 test('encrypted vault round trips originals and profiles without plaintext leakage',async()=>{const encrypted=await encryptVault(vault,'a long test passphrase');assert.ok(!encrypted.includes('Private evidence'));assert.deepEqual(await decryptVault(encrypted,'a long test passphrase'),vault)});
 test('wrong passphrase or modified ciphertext cannot restore',async()=>{const encrypted=await encryptVault(vault,'a long test passphrase');await assert.rejects(decryptVault(encrypted,'wrong long passphrase'),/Wrong passphrase/);const v=JSON.parse(encrypted);v.data=(v.data[0]==='A'?'B':'A')+v.data.slice(1);await assert.rejects(decryptVault(JSON.stringify(v),'a long test passphrase'),/damaged/)});
 test('backup rejects incomplete profile index and unsafe record IDs',()=>{const v=structuredClone(vault);v.state[2][1].active='missing';assert.throws(()=>validateVault(v),/missing profile/);const b=structuredClone(vault);b.state[0][1].files[0].id='\" onclick=evil';assert.throws(()=>validateVault(b),/Invalid vault item/)});
+
+test('restore requires one index entry per profile and a matching active record',()=>{
+ for(const edit of [
+  v=>v.state[2][1].items.push({id:'p'}),
+  v=>v.state[0][1]={...v.state[0][1],profile:{id:'other'}},
+  v=>v.state[1][1]={...v.state[1][1],profile:{id:'other'}},
+  v=>v.state.push(['identity:guest',{name:42}]),
+  v=>delete v.state[0][1].files[0].id,
+ ]){
+  const archive=structuredClone(vault);edit(archive);assert.throws(()=>validateVault(archive));
+ }
+});

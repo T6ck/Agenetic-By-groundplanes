@@ -18,7 +18,7 @@ const server=createServer(async(req,res)=>{
  }catch{res.writeHead(404).end();}
 });
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
-const browser=await chromium.launch();
+const browser=await chromium.launch({executablePath:process.env.CHROMIUM_EXECUTABLE_PATH||undefined});
 const page=await browser.newPage({viewport:{width:1440,height:1000}});
 const errors=[];page.on('pageerror',error=>errors.push(error.message));
 const checks=[];
@@ -76,6 +76,103 @@ try{
   ]));
   assert.ok(labels.length>0);
   assert.ok(labels.every(([title,state])=>title===state));
+ });
+ await check('600 actual workspace notes preserve links through zoom and keyboard selection',async()=>{
+  const observed=await page.evaluate(async()=>{
+   const original=data,previous={...network.camera};
+   try{
+    data=freshProfile('Field study');
+    for(let i=0;i<600;i++)data.files.push({id:'field-'+i,name:'Interview '+i,text:i?'Field observation. [[Interview '+(i-1)+']]':''});
+    network.signature='';network.space=null;render();
+    const svg=document.querySelector('.knowledge-svg'),count=svg.querySelectorAll('[data-knowledge-node]').length;
+    const bounds=svg.getBoundingClientRect();
+    svg.dispatchEvent(new WheelEvent('wheel',{clientX:bounds.left+100,clientY:bounds.top+100,deltaY:-24,cancelable:true,bubbles:true}));
+    await new Promise(r=>setTimeout(r,220));
+    const middle=svg.querySelector('[data-knowledge-node="field-300"]');
+    middle.focus();highlightNetwork();
+    return {count,related:svg.querySelectorAll('.knowledge-edge.related').length,neighbors:svg.querySelectorAll('.graph-neighbor').length};
+   }finally{
+    data=original;network.hovered=null;network.space=null;network.signature='';network.camera=previous;render();await save();
+   }
+  });
+  assert.equal(observed.count,600);assert.equal(observed.related,2);assert.equal(observed.neighbors,3);
+ });
+ await check('graph keyboard activation and hover use the visible links',async()=>{
+  const node=page.locator('.knowledge-node').first();
+  assert.equal(await page.locator('.knowledge-node[tabindex="0"]').count(),1);
+  await node.focus();await node.press('End');
+  assert.equal(await page.locator('.knowledge-node').last().evaluate(el=>el===document.activeElement),true);
+  await page.keyboard.press('Home');await page.keyboard.press('Space');
+  await page.waitForFunction(()=>studio.inspector);
+  const result=await page.evaluate(()=>{
+   const original=studioLinks;
+   let calls=0;
+   studioLinks=function(){calls++;return original()};
+   try{
+    const svg=document.querySelector('.knowledge-svg'),edge=svg.querySelector('.knowledge-edge');
+    const selected=[...studio.selected][0];
+    const start=Array.from(svg.querySelectorAll('[data-knowledge-node]')).find(el=>el.dataset.knowledgeNode!==selected);
+    const before=Array.from(svg.querySelectorAll('.knowledge-edge.related'));
+    start.dispatchEvent(new PointerEvent('pointerover',{bubbles:true}));
+    return {calls,related:before.every(e=>e.classList.contains('related')),neighbors:svg.querySelectorAll('.graph-neighbor').length};
+   }finally{studioLinks=original;studio.inspector=false;studio.selected.clear();network.hovered=null;render()}
+  });
+  assert.equal(result.calls,0);assert.ok(result.related);assert.ok(result.neighbors>=1);
+ });
+ await check('setup retries a failed save on the same step and the reopened guide can close',async()=>{
+  await page.locator('[data-navigate]').click();
+  await page.locator('[data-setup-reopen]').click();
+  assert.equal(await page.locator('.setup-wizard h1').evaluate(el=>el===document.activeElement),true);
+  await page.evaluate(()=>{window.setupSave=save;save=async()=>{throw Error('Storage unavailable during setup')}});
+  await page.locator('[data-setup-next]').click();
+  assert.match(await page.locator('#setup-error').textContent(),/Storage unavailable/);
+  assert.equal(await page.evaluate(()=>setupStep),0);
+  await page.evaluate(()=>{save=window.setupSave});
+  await page.locator('[data-setup-next]').click();await page.locator('#setup-name').waitFor();
+  assert.equal(await page.evaluate(()=>appearance().onboarding.step),1);
+  await page.keyboard.press('Escape');
+  assert.equal(await page.locator('.setup-wizard').count(),0);
+  assert.equal(await page.locator('[data-navigate]').evaluate(el=>el===document.activeElement),true);
+ });
+ await check('new desktop setup can finish at phone width and stays complete on restart',async()=>{
+  const context=await browser.newContext({viewport:{width:390,height:844}});
+  await context.addInitScript(()=>{window.ageneticDesktop={}});
+  const fresh=await context.newPage();
+  fresh.on('pageerror',error=>errors.push(error.message));
+  try{
+   await fresh.goto(page.url());
+   const wizard=fresh.locator('.setup-wizard'),next=wizard.locator('[data-setup-next]');
+   await next.waitFor();await fresh.keyboard.press('Escape');assert.ok(await wizard.isVisible());
+   await next.click();await wizard.locator('#setup-name').fill('River');
+   assert.ok(await wizard.evaluate(w=>w.scrollWidth<=w.clientWidth+1));
+   await next.click();
+   const theme=wizard.locator('[data-setup-theme="graphite"]');
+   await theme.click();await fresh.waitForFunction(()=>document.activeElement.dataset.setupTheme==='graphite');
+   await next.click();await next.click();assert.match(await wizard.locator('#setup-error').textContent(),/backups/);
+   await wizard.locator('#setup-storage').check();await next.click();await next.click();
+   await wizard.locator('#setup-privacy').check();await next.click();
+   await wizard.waitFor({state:'detached'});await fresh.reload();await fresh.waitForSelector('.knowledge-node');
+   assert.equal(await fresh.locator('.setup-wizard').count(),0);
+   assert.equal(await fresh.evaluate(()=>profileIdentity().name),'River');
+   assert.equal(await fresh.evaluate(()=>appearance().theme),'graphite');
+  }finally{await context.close()}
+ });
+ await check('a failed restore preserves both existing IndexedDB stores',async()=>{
+  const outcome=await page.evaluate(async()=>{
+   const id='restore-check',marker='keeps existing work';
+   const tx=db.transaction(['state','blobs'],'readwrite');
+   tx.objectStore('blobs').put(new Blob([marker]),id);
+   await new Promise((resolve,reject)=>{tx.oncomplete=resolve;tx.onabort=reject});
+   const before=await req(db.transaction('state').objectStore('state').get('profiles'));
+   const put=IDBObjectStore.prototype.put;let message;
+   IDBObjectStore.prototype.put=function(){throw Error('Simulated local write failure')};
+   try{await restoreVault({state:[['current',{}]],blobs:[]})}catch(e){message=e.message}
+   finally{IDBObjectStore.prototype.put=put}
+   const after=await req(db.transaction('state').objectStore('state').get('profiles'));
+   const file=await req(db.transaction('blobs').objectStore('blobs').get(id));
+   return {message,intact:JSON.stringify(before)===JSON.stringify(after),bytes:await file.text()};
+  });
+  assert.match(outcome.message,/Simulated/);assert.ok(outcome.intact);assert.equal(outcome.bytes,'keeps existing work');
  });
  await check('save closes inspector and stays closed',async()=>{
   await page.locator('[data-network="open"]').first().click();

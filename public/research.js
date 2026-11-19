@@ -243,9 +243,27 @@ document.addEventListener('submit', async event=>{
  } catch (error) {report(error);}
 });
 // Background structure follows actual node positions and graph connectivity.
-function updateNeuralField(){document.querySelectorAll('.depth-field').forEach(el=>el.remove());if(!inNetwork()||appearance().depth==='off')return;const world=document.querySelector('.network-world');if(!world)return;world.querySelector('.neural-field')?.remove();const {nodes,links}=networkData();if(!nodes.length)return;const layer=document.createElementNS('http://www.w3.org/2000/svg','g');layer.setAttribute('class','neural-field');layer.setAttribute('aria-hidden','true');for(const n of nodes){const p=network.positions.get(n.id);if(!p)continue;const count=links.filter(l=>l.from===n.id||l.to===n.id).length;if(count<5)continue;const ring=document.createElementNS(layer.namespaceURI,'circle');ring.setAttribute('cx',p[0]);ring.setAttribute('cy',p[1]);ring.setAttribute('r',40+Math.min(12,count)*8);ring.setAttribute('class','neural-region');layer.append(ring)}world.prepend(layer)}
-const neuralCamera=applyNetworkCamera;applyNetworkCamera=function(){neuralCamera();updateNeuralField()};
-const neuralDepth=syncDepth;syncDepth=function(){document.documentElement.dataset.depth=appearance().depth||'subtle';updateNeuralField()};
+function updateNeuralField(){
+ const svg=document.querySelector('.knowledge-svg'),world=svg?.querySelector('.network-world');
+ if(!world)return;
+ const existing=world.querySelector('.neural-field');
+ if(appearance().depth==='off'){existing?.remove();return}
+ // These rings live in world coordinates. A camera change moves the existing layer.
+ if(existing)return;
+ const layer=document.createElementNS(svg.namespaceURI,'g');
+ layer.setAttribute('class','neural-field');layer.setAttribute('aria-hidden','true');
+ const graph=indexedGraph(svg);
+ for(const [id,edges] of graph.edges){
+  if(edges.length<5)continue;
+  const point=network.positions.get(id);if(!point)continue;
+  const ring=document.createElementNS(svg.namespaceURI,'circle');
+  ring.setAttribute('cx',point[0]);ring.setAttribute('cy',point[1]);
+  ring.setAttribute('r',40+Math.min(12,edges.length)*8);ring.setAttribute('class','neural-region');
+  ring.dataset.regionNode=id;layer.append(ring);
+ }
+ world.prepend(layer);
+}
+syncDepth=function(){document.documentElement.dataset.depth=appearance().depth||'subtle';updateNeuralField()};
 
 document.addEventListener('keydown',event=>{
  if(event.key==='Escape' && companionOpen && !$('#dialog').open && !event.defaultPrevented) setCompanionOpen(false);

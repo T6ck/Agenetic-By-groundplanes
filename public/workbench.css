@@ -8,6 +8,13 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 .knowledge-file-list button{min-height:36px}
 .network-context>span,.section-kicker{font-size:11px;letter-spacing:.08em}
 .network-context h1{font-size:30px}
+/* Cancel camera magnification around each node's own origin. Text and
+   leader lines keep stable pixel geometry between collision passes. */
+.knowledge-node text,.knowledge-node .node-tether{
+  transform-box:view-box;
+  transform-origin:0 0;
+  transform:scale(var(--label-scale,1));
+}
 .node-state-label{font-size:10px;fill:var(--ax-muted)}
 .knowledge-svg[data-detail=compact] .node-state-label{display:none}
 .knowledge-node text{paint-order:stroke;stroke:var(--ax-bg);stroke-width:4px;stroke-linejoin:round;fill:var(--ax-ink)}
@@ -183,4 +190,48 @@ html body .card-layer .mind-card .card-header {
 .research-desk .project-source blockquote {
   border-radius: 0 8px 8px 0;
   background: var(--ax-panel);
+}
+
+html body .knowledge-svg.has-node-highlight .knowledge-node:not(.graph-neighbor):not(:focus-visible) { opacity: .62; }
+html body .knowledge-node:focus-visible .node-surface { stroke: var(--ax-ink); stroke-width: 3px; }
+
+.setup-main { min-width: 0; }
+.setup-main footer { flex-wrap: wrap; }
+.setup-main footer [data-setup-next] { margin-inline-start: auto; }
+.setup-main :is(input,select) { max-inline-size: 100%; }
+@media (max-width: 480px) {
+  .setup-main .identity-photo-row { flex-wrap: wrap; }
+  .setup-main footer { gap: 8px; }
+}
+
+.setup-side { min-inline-size: 0; }
+.setup-side .setup-brand-art {
+  display: block;
+  inline-size: min(100%, 148px);
+  block-size: auto;
+  margin-block-end: 18px;
+  border-radius: 14px;
+}
+.setup-main .field { min-inline-size: 0; max-inline-size: 100%; }
+@media (max-width: 650px) {
+  .setup-wizard[open] { grid-template-columns: minmax(0, 1fr); }
+  .setup-side:has(.setup-brand-art) {
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr);
+    column-gap: 12px;
+    align-items: center;
+  }
+  .setup-side .setup-brand-art {
+    grid-row: span 2;
+    inline-size: 44px;
+    margin: 0;
+    border-radius: 10px;
+  }
+  .setup-side > strong { align-self: end; }
+  .setup-side > small { align-self: start; }
+}
+
+html body .knowledge-svg.has-node-highlight .knowledge-edge.related {
+  stroke: var(--ax-accent) !important;
+  stroke-opacity: .85;
 }

@@ -19,3 +19,16 @@ test('audit checks current quotes without claiming scientific validation',async(
  assert.ok(!auditHtml(report).includes('<script>'));
  files[0].text='Changed';assert.equal((await claimAudit(files,{})).rows[0].check,'quote_missing_or_changed');
 });
+
+test('current workspace audit withholds unavailable evidence and distinguishes stale reviews',async()=>{
+ const claim={id:'claim',name:'Finding',research:{state:'supported',quotes:[{id:'outside',excerpt:'saved passage'}]}};
+ const result=await claimAudit([claim],{current:new Set()});
+ assert.equal(result.rows[0].review_currency,'needs_recheck');
+ assert.equal(result.rows[0].check,'quote_missing_or_changed');
+ assert.equal(result.rows[0].evidence[0].source_sha256,null);
+ assert.ok(!JSON.stringify(result).includes('saved passage'));
+ const source={id:'outside',name:'Now visible',text:'saved passage with new surrounding text'};
+ const updated=await claimAudit([source,claim],{current:new Set()});
+ assert.equal(updated.rows[0].check,'exact_quote_present');
+ assert.equal(updated.rows[0].review_currency,'needs_recheck');
+});

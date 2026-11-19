@@ -7,3 +7,20 @@ test('workflow round trip preserves documents, dependencies and layout with fres
 test('rejects dangling references, secrets, duplicate IDs, malformed attachments and invalid positions',()=>{for(const mutate of [p=>p.payload.nodes[2].files=['missing'],p=>p.payload.runnerToken='secret',p=>p.payload.nodes[1].id='f',p=>p.payload.nodes[0].attachment.base64='<script>',p=>p.payload.positions.f=[Infinity,0],p=>p.payload.nodes[2].model='f']){const p=fixture();mutate(p);assert.throws(()=>validatePackage(p))}});
 test('workflow packages accept large original files but enforce a bounded envelope',()=>{const p=fixture();p.payload.nodes[0].attachment.base64='a'.repeat(4*300000);assert.doesNotThrow(()=>validatePackage(p));p.payload.nodes[0].attachment.base64='a'.repeat(4*3500000);assert.doesNotThrow(()=>validatePackage(p));p.payload.nodes[0].attachment.base64='a'.repeat(4*4100000);assert.throws(()=>validatePackage(p),/Invalid workflow|size limit/)});
 test('model references retain pinned provenance and reject credentials',()=>{const p=fixture();p.payload.nodes[1].source={provider:'huggingface',repo:'publisher/model',revision:'a'.repeat(40),filename:'model.gguf'};assert.doesNotThrow(()=>validatePackage(p));let i=0;assert.deepEqual(restoreWorkflow(p.payload,()=>String(++i)).nodes[1].record.source,p.payload.nodes[1].source);p.payload.nodes[1].source.token='private';assert.throws(()=>validatePackage(p));delete p.payload.nodes[1].source.token;p.payload.nodes[1].source.revision='main';assert.throws(()=>validatePackage(p));});
+
+test('including a file from another workspace requires confirmation before reading its attachment',async()=>{
+ const {runInNewContext}=await import('node:vm');
+ const {readFile}=await import('node:fs/promises');
+ const script=await readFile('public/workflows.js','utf8');
+ const agent={kind:'agent',id:'reviewer',name:'Reviewer',files:['field-notes']};
+ const source={kind:'file',id:'field-notes',name:'Field notes',text:'Observations'};
+ const space={id:'a',name:'Study'},data={links:[]};
+ let allow=false,reads=0,dialog='';
+ const context={data,activeSpace:()=>space,spaceNodes:()=>[agent],studioNodes:()=>[agent,source],
+  saveEditor:async()=>true,ensureStudio(){},async confirmRemoval(title,description){dialog=description;return allow},
+  readPackage:async p=>p,blob:async()=>{reads++;return null}};
+ const build=runInNewContext(script+'\ncurrentWorkflowPackage',context);
+ assert.equal(await build(),null);assert.equal(reads,0);assert.match(dialog,/Field notes/);
+ allow=true;const confirmed=await build();
+ assert.equal(reads,1);assert.deepEqual(Array.from(confirmed.payload.nodes,n=>n.id),['reviewer','field-notes']);
+});

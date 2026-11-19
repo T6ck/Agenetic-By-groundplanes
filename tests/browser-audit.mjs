@@ -13,7 +13,7 @@ const server=createServer(async(req,res)=>{
   if(pathname==='/'){res.setHeader('Content-Type','text/html');res.end(html);return;}
   const file=resolve(root,'.'+decodeURIComponent(pathname));
   if(!file.startsWith(root+'/')){res.writeHead(403).end();return;}
-  res.setHeader('Content-Type',({'.js':'text/javascript','.mjs':'text/javascript','.css':'text/css','.svg':'image/svg+xml','.ttf':'font/ttf','.webp':'image/webp'})[extname(file)]||'application/octet-stream');
+  res.setHeader('Content-Type',({'.html':'text/html; charset=utf-8','.js':'text/javascript','.mjs':'text/javascript','.css':'text/css','.svg':'image/svg+xml','.ttf':'font/ttf','.webp':'image/webp'})[extname(file)]||'application/octet-stream');
   res.end(await readFile(file));
  }catch{res.writeHead(404).end();}
 });
@@ -97,6 +97,20 @@ try{
   });
   assert.equal(observed.count,600);assert.equal(observed.related,2);assert.equal(observed.neighbors,3);
  });
+ await check('zoom retains the graph depth layer and turning depth off clears it',async()=>{
+  const result=await page.evaluate(()=>{
+   const pref=appearance(),old=pref.depth;
+   try{
+    pref.depth='subtle';updateNeuralField();
+    const layer=document.querySelector('.neural-field');
+    applyNetworkCamera();updateNeuralField();
+    const same=layer!==null&&layer===document.querySelector('.neural-field');
+    pref.depth='off';updateNeuralField();
+    return {same,cleared:!document.querySelector('.neural-field')};
+   }finally{pref.depth=old;updateNeuralField()}
+  });
+  assert.ok(result.same);assert.ok(result.cleared);
+ });
  await check('graph keyboard activation and hover use the visible links',async()=>{
   const node=page.locator('.knowledge-node').first();
   assert.equal(await page.locator('.knowledge-node[tabindex="0"]').count(),1);
@@ -136,7 +150,7 @@ try{
  });
  await check('new desktop setup can finish at phone width and stays complete on restart',async()=>{
   const context=await browser.newContext({viewport:{width:390,height:844}});
-  await context.addInitScript(()=>{window.ageneticDesktop={}});
+  await context.addInitScript(()=>{window.ageneticDesktop={getConnection:async()=>({error:'Local model offline'})}});
   const fresh=await context.newPage();
   fresh.on('pageerror',error=>errors.push(error.message));
   try{
@@ -155,6 +169,37 @@ try{
    assert.equal(await fresh.locator('.setup-wizard').count(),0);
    assert.equal(await fresh.evaluate(()=>profileIdentity().name),'River');
    assert.equal(await fresh.evaluate(()=>appearance().theme),'graphite');
+  }finally{await context.close()}
+ });
+ await check('team billing recovers from a service error and switching panels stays local',async()=>{
+  const context=await browser.newContext(),teamPage=await context.newPage();
+  const first='1',second='2',teams=[{id:first,name:'Field team'},{id:second,name:'Lab team'}];
+  let retry=true,statusCalls=0;
+  try{
+   await context.addInitScript(()=>{sessionStorage.setItem('agenetic.business.session',JSON.stringify({
+    access_token:'fixture',expires_at:4102444800,user:{email:'reviewer@example.test'}
+   }))});
+   await teamPage.route('**/functions/v1/agenetic-business',async route=>{
+    const headers={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'authorization, content-type, apikey'};
+    if(route.request().method()==='OPTIONS')return route.fulfill({status:204,headers});
+    const {action,team_id}=route.request().postDataJSON();
+    if(action==='teams')return route.fulfill({json:{result:teams},headers});
+    assert.equal(action,'status');statusCalls++;
+    if(retry){retry=false;return route.fulfill({status:503,json:{error:'Service busy'},headers})}
+    const team=teams.find(t=>t.id===team_id);
+    return route.fulfill({json:{result:{team:{...team,status:'unpaid',seats:0,has_subscription:false},
+     role:'owner',members:[],invites:[],projects:[],keys:[]}},headers});
+   });
+   await teamPage.goto(new URL('/team.html',page.url()).href);
+   await teamPage.getByRole('button',{name:'Try again'}).click();
+   await teamPage.getByRole('heading',{name:'Field team'}).waitFor();
+   const before=statusCalls;
+   await teamPage.locator('[data-view="projects"]').click();
+   await teamPage.getByRole('heading',{name:'Shared research projects'}).waitFor();
+   assert.equal(statusCalls,before);
+   await teamPage.locator('[data-team]').selectOption(second);
+   await teamPage.getByRole('heading',{name:'Lab team'}).waitFor();
+   assert.equal(await teamPage.locator('[data-view="team"]').getAttribute('aria-pressed'),'true');
   }finally{await context.close()}
  });
  await check('a failed restore preserves both existing IndexedDB stores',async()=>{

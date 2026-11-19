@@ -612,7 +612,8 @@ document.addEventListener('pointerdown',e=>{
   const svg=e.target.closest('.knowledge-svg');
   if(!svg||e.button!==0||!e.isPrimary||studio.connecting)return;
   const node=e.target.closest('[data-knowledge-node]'),id=node?.dataset.knowledgeNode;
-  network.drag={id,svg,pointerId:e.pointerId,x:e.clientX,y:e.clientY,camera:{...network.camera},position:id?[...network.positions.get(id)]:null,moved:false};
+  const region=id?svg.querySelector('.neural-region[data-region-node="'+CSS.escape(id)+'"]'):null;
+  network.drag={id,svg,region,pointerId:e.pointerId,x:e.clientX,y:e.clientY,camera:{...network.camera},position:id?[...network.positions.get(id)]:null,moved:false};
 });
 document.addEventListener('pointermove',e=>{
   const d=network.drag;if(!d||d.pointerId!==e.pointerId)return;
@@ -622,6 +623,7 @@ document.addEventListener('pointermove',e=>{
   if(d.id) {
     const p=[d.position[0]+dx/d.camera.scale,d.position[1]+dy/d.camera.scale];network.positions.set(d.id,p);
     const graph=indexedGraph(d.svg);
+    if(d.region){d.region.setAttribute('cx',p[0]);d.region.setAttribute('cy',p[1])}
     graph.nodes.get(d.id)?.setAttribute('transform','translate('+p.join(' ')+')');
     for(const edge of graph.edges.get(d.id)||[]) {
       if(edge.dataset.source===d.id){edge.setAttribute('x1',p[0]);edge.setAttribute('y1',p[1])}

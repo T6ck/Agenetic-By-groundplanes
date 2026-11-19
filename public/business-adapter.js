@@ -1,6 +1,6 @@
 'use strict';
 window.ageneticTeamBridge={
- async audit(team,reviewer){const {claimAudit,auditHtml}=await import('./business-rules.mjs');const files=workspaceSourceFiles().map(({id,name,text,research})=>({id,name,text,research:structuredClone(research)}));
+ async audit(team,reviewer){const {claimAudit,auditHtml}=await import('./business-rules.mjs');const files=workspaceSourceFiles().map(({id,name,text,research,originTrace})=>({id,name,text,originTrace,research:structuredClone(research)}));
  const byId=new Map(files.map(file=>[file.id,file]));
  const current=new Set(files.filter(file=>file.research&&researchSourceReady(file,byId)).map(file=>file.id));
  const r=await claimAudit(files,{team,reviewer,workspace:activeSpace().name,current});for(const [name,text,type] of [['agenetic-claim-audit.json',JSON.stringify(r,null,2),'application/json'],['agenetic-claim-audit.html',auditHtml(r),'text/html']]){const url=URL.createObjectURL(new Blob([text],{type})),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}},

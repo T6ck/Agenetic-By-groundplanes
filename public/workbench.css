@@ -203,3 +203,30 @@ html body .knowledge-node:focus-visible .node-surface { stroke: var(--ax-ink); s
   .setup-main .identity-photo-row { flex-wrap: wrap; }
   .setup-main footer { gap: 8px; }
 }
+
+.setup-side { min-inline-size: 0; }
+.setup-side .setup-brand-art {
+  display: block;
+  inline-size: min(100%, 148px);
+  block-size: auto;
+  margin-block-end: 18px;
+  border-radius: 14px;
+}
+.setup-main .field { min-inline-size: 0; max-inline-size: 100%; }
+@media (max-width: 650px) {
+  .setup-wizard[open] { grid-template-columns: minmax(0, 1fr); }
+  .setup-side:has(.setup-brand-art) {
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr);
+    column-gap: 12px;
+    align-items: center;
+  }
+  .setup-side .setup-brand-art {
+    grid-row: span 2;
+    inline-size: 44px;
+    margin: 0;
+    border-radius: 10px;
+  }
+  .setup-side > strong { align-self: end; }
+  .setup-side > small { align-self: start; }
+}

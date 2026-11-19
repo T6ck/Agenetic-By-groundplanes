@@ -192,7 +192,7 @@ html body .card-layer .mind-card .card-header {
   background: var(--ax-panel);
 }
 
-html body .knowledge-svg.has-node-highlight .knowledge-node:not(.graph-neighbor):not(:focus-visible) { opacity: .38; }
+html body .knowledge-svg.has-node-highlight .knowledge-node:not(.graph-neighbor):not(:focus-visible) { opacity: .62; }
 html body .knowledge-node:focus-visible .node-surface { stroke: var(--ax-ink); stroke-width: 3px; }
 
 .setup-main { min-width: 0; }
@@ -229,4 +229,9 @@ html body .knowledge-node:focus-visible .node-surface { stroke: var(--ax-ink); s
   }
   .setup-side > strong { align-self: end; }
   .setup-side > small { align-self: start; }
+}
+
+html body .knowledge-svg.has-node-highlight .knowledge-edge.related {
+  stroke: var(--ax-accent) !important;
+  stroke-opacity: .85;
 }

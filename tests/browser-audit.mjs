@@ -387,6 +387,23 @@ try{
   await page.waitForFunction(()=>deskState().project.brief.text==='Unsaved writing must survive a failed save.');
   await page.evaluate(()=>{page='Overview';render();});
  });
+ await check('resizing a panned workspace preserves the world point at its center',async()=>{
+  const center=()=>page.evaluate(()=>{
+   const svg=document.querySelector('.knowledge-svg'),c=network.camera,box=svg.getBoundingClientRect();
+   return [(box.width/2-c.x)/c.scale,(box.height/2-c.y)/c.scale,c.scale];
+  });
+  await page.mouse.move(1,1);
+  const before=await center();
+  await page.setViewportSize({width:840,height:790});
+  await page.waitForFunction(()=>{
+   const box=document.querySelector('.knowledge-svg').getBoundingClientRect(),size=activeSpace().graphViewport;
+   return size?.width===box.width&&size?.height===box.height;
+  });
+  const after=await center();
+  assert.equal(before[2],after[2]);assert.ok(Math.hypot(before[0]-after[0],before[1]-after[1])<1);
+  await page.setViewportSize({width:1440,height:1000});
+ });
+ await page.waitForFunction(()=>!document.querySelector('#toast').textContent);
  for(const theme of ['porcelain','graphite','midnight','ember','forest']){
   await page.evaluate(theme=>{appearance().theme=theme;appearance().headings='sans';appearance().depth='off';appearance().grid=true;render();},theme);
   await check(theme+' respects independent grid and heading settings',async()=>{

@@ -296,7 +296,8 @@ function renderNetwork() {
   '<aside id="space-inspector" hidden></aside><aside id="space-library" hidden></aside>'+
   (network.settings?'<section class="graph-settings"><div class="floating-heading"><h2>Graph settings</h2>'+networkButton('filters',lineIcon('close'),'','aria-label="Close graph settings"')+'</div><label>Labels<select id="graph-labels" aria-label="Graph labels">'+['auto','always','off'].map(v=>'<option value="'+v+'" '+(network.labels===v?'selected':'')+'>'+({auto:'Visible by default',always:'Always visible',off:'Selection only'}[v])+'</option>').join('')+'</select></label><label>Node size<input id="graph-size" type="range" min="0.6" max="1.8" step="0.1" value="'+network.nodeScale+'"></label><label>Edge visibility<input id="graph-edges" type="range" min="0.08" max="0.65" step="0.01" value="'+network.edgeOpacity+'"></label><p>Node size reflects the number of connections. Drag a node to place it.</p>'+networkButton('arrange','Organize visible nodes')+'</section>':'')+
   appearancePanel()+'<div id="connect-banner" '+(!studio.connecting?'hidden':'')+'>Choose a node to connect'+studioButton('cancel','Cancel')+'</div>';
-  drawInspector();applyNetworkCamera();highlightNetwork();
+  network.hovered=null;
+  observeGraphViewport(space);drawInspector();applyNetworkCamera();highlightNetwork();
   if(network.needFit){network.needFit=false;requestAnimationFrame(fitNetwork)}
 }
 render=function() {
@@ -308,6 +309,27 @@ render=function() {
   }
   normalizeIcons();applyAppearance();
 };
+let graphResizeObserver;
+function observeGraphViewport(space){
+  graphResizeObserver?.disconnect();
+  const svg=$('.knowledge-svg');
+  if(!svg||typeof ResizeObserver!=='function')return;
+  function resize(){
+    if(!svg.isConnected||activeSpace()!==space)return;
+    const {width,height}=svg.getBoundingClientRect();
+    if(!width||!height)return;
+    const old=space.graphViewport;
+    space.graphViewport={width,height};
+    if(!old||!Number.isFinite(old.width)||!Number.isFinite(old.height)||network.needFit)return;
+    if(width===old.width&&height===old.height)return;
+    network.camera={...network.camera,x:network.camera.x+(width-old.width)/2,y:network.camera.y+(height-old.height)/2};
+    space.graphCamera={...network.camera};
+    moveGraphCamera();
+  }
+  resize();
+  graphResizeObserver=new ResizeObserver(resize);
+  graphResizeObserver.observe(svg);
+}
 let graphPaintFrame = 0;
 function moveGraphCamera() {
   const world = $('.network-world');

@@ -1,0 +1,61 @@
+.invest-entry { pointer-events:auto; padding:0 12px; height:36px; border:1px solid var(--ax-line); border-radius:7px; background:var(--ax-panel); color:var(--ax-ink); font:600 13px var(--font-sans); }
+.invest-entry[aria-expanded=true] { background:var(--ax-ink); color:var(--ax-panel); }
+html body.knowledge-mode #content:has(#investigation-pane) .knowledge-explorer,
+#content:has(#investigation-pane) :is(.type-filters,[data-explorer-toggle]) { display:none!important; }
+#investigation-pane { position:absolute; z-index:8; top:96px; bottom:0; left:0; width:304px; max-width:100%; box-sizing:border-box; overflow:auto; padding:24px 20px; color:var(--ax-ink); background:var(--ax-panel); border-right:1px solid var(--ax-line); font:14px/1.45 var(--font-sans); scrollbar-width:thin; }
+#investigation-pane button { color:var(--ax-ink); font:500 13px/1.35 var(--font-sans); min-height:34px; overflow-wrap:anywhere; }
+#investigation-pane :is(h2,h3,h4,p) { margin:0; }
+.invest-title,.invest-results,.invest-actions,.invest-pages { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+#investigation-pane .invest-title h2 { font:500 26px/1.1 var(--font-sans); letter-spacing:-.045em; }
+.invest-title button { color:var(--ax-muted)!important; }
+.invest-tabs { display:flex; padding:16px 0 0; border-bottom:1px solid var(--ax-line); gap:12px; }
+.invest-tabs button { background:transparent!important; border:0; border-radius:0; padding:5px 2px 9px; }
+.invest-tabs button[aria-pressed=true] { box-shadow:inset 0 -2px var(--ax-ink); font-weight:700!important; }
+.invest-body { display:grid; gap:14px; padding:20px 0; }
+.invest-field { color:var(--ax-muted); font-size:12px; font-weight:600; display:grid; gap:5px; min-width:0; }
+.invest-field select { box-sizing:border-box; width:100%; min-height:38px; padding:5px 8px; border:1px solid var(--ax-line); background:var(--ax-bg); color:var(--ax-ink); border-radius:6px; font:500 13px var(--font-sans); }
+.invest-results h3 { font:600 16px/1.25 var(--font-sans); }
+.invest-body h4,.quote-comparison h4 { font:600 13px var(--font-sans); }
+.invest-muted,.invest-empty,.invest-relation,.invest-quote small { color:var(--ax-muted); font-size:12px; }
+.invest-steps,.region-members { padding:0; margin:0; list-style:none; }
+.invest-steps li { position:relative; display:grid; justify-items:start; padding-left:20px; }
+.invest-steps li:before { position:absolute; content:''; left:3px; top:0; bottom:0; border-left:1px solid var(--ax-line); }
+.invest-steps li:first-child:before { top:18px; }
+.invest-steps li:last-child:before { bottom:18px; }
+.invest-steps li:after { position:absolute; content:''; left:0; bottom:13px; width:7px; height:7px; border-radius:2px; background:var(--ax-accent); }
+.invest-steps .invest-record,.region-members button { width:100%; text-align:left; }
+.invest-relation { padding:8px 0 0; }
+.invest-actions { justify-content:flex-start; flex-wrap:wrap; border-top:1px solid var(--ax-line); padding-top:14px; }
+#investigation-pane .invest-actions button,.invest-pages button,.invest-quote button,.quote-comparison mark { background:var(--ax-raised); border:1px solid var(--ax-line); border-radius:5px; padding:5px 9px; }
+#investigation-pane .invest-actions [data-invest=frame],.invest-pages button[aria-pressed=true] { color:var(--ax-panel); background:var(--ax-ink); }
+.invest-saved { margin-top:18px; padding-top:10px; border-top:1px solid var(--ax-line); }
+.invest-saved summary { padding-block:6px; cursor:pointer; font-size:13px; }
+.invest-saved>div { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+.invest-saved [data-invest=restore],.invest-source { text-align:left; }
+.invest-saved [data-invest=forget] { font-size:12px!important; color:var(--ax-muted)!important; }
+.invest-quote { border-left:2px solid var(--ax-accent); padding-left:12px; }
+.invest-quote blockquote { margin:8px 0; overflow-wrap:anywhere; }
+.quote-comparison section { border-top:1px solid var(--ax-line); margin-top:16px; padding:8px 0; }
+.quote-window { white-space:pre-wrap; overflow-wrap:anywhere; line-height:1.65; }
+.quote-comparison mark { color:var(--ax-ink); background:color-mix(in srgb,var(--ax-accent) 25%,var(--ax-panel)); border:0; padding:1px 2px; }
+#content .knowledge-svg.has-investigation .atlas-surface { opacity:.53; }
+#content .knowledge-svg.has-investigation .knowledge-node:not(.invest-hit,.selected,:hover,:focus-visible) { opacity:.36; }
+#content .knowledge-svg.has-investigation .knowledge-node:not(.invest-hit,.selected,:hover,:focus-visible) :is(text,.node-tether) { opacity:0; }
+#content .knowledge-svg.has-investigation .knowledge-edge:not(.invest-link,.related) { opacity:.15!important; }
+#content .knowledge-svg.has-investigation .knowledge-edge.invest-link { stroke:var(--ax-accent)!important; stroke-opacity:1!important; opacity:1!important; stroke-width:2.8px; }
+#content .invest-endpoint .atlas-halo { stroke:var(--ax-ink); stroke-width:1.4px; opacity:.95; }
+#content .invest-territory { fill:var(--ax-accent); fill-opacity:.1; stroke:var(--ax-accent); stroke-width:22; stroke-opacity:.13; stroke-linejoin:round; stroke-linecap:round; pointer-events:none; }
+#content .knowledge-svg[data-labels=auto] .atlas-record.invest-hit:not(.label-collision) text { opacity:1; }
+@media(min-width:761px) { html body.knowledge-mode #content:has(#investigation-pane) .network-stage { left:304px!important; } }
+@media(max-width:760px) {
+ #investigation-pane { top:76px; left:8px; bottom:10px; z-index:42; width:min(340px,calc(100% - 16px)); border:1px solid var(--ax-line); border-radius:10px; padding:18px; }
+ #investigation-pane[data-sheet=false] { display:none; }
+ #investigation-pane button,#investigation-pane select { min-height:40px; }
+ .invest-entry { height:32px; }
+}
+.impact-claims { margin:0; padding:0; list-style:none; }
+.impact-claims li { border-top:1px solid var(--ax-line); padding:10px 0; }
+.impact-claims small { display:block; color:var(--ax-muted); font-size:12px; }
+#investigation-pane .impact-claims button,#investigation-pane .region-members button,#investigation-pane .invest-record { display:block; text-align:left; padding-inline:3px; }
+.invest-field input[type=search] { min-width:0; width:100%; border:1px solid var(--ax-line); background:var(--ax-bg); color:var(--ax-ink); padding:6px 8px; border-radius:5px; font:13px var(--font-sans); }
+#content .knowledge-svg.has-investigation .network-edges { opacity:.92!important; }

@@ -15,6 +15,7 @@ function nodeState(n){
 }
 const workbenchNode=networkNode;
 networkNode=function(n,links){
+ if(network.layout&&network.layout!=='freeform')return atlasNode(n,links);
  let html=workbenchNode(n,links);const state=nodeState(n);
  html=html.replace('signal-node '+n.kind,'signal-node '+n.kind+' subtype-'+state);
  html=html.replace('</text>','<tspan class="node-state-label" x="32" dy="17">'+esc(objectLabel(n))+'</tspan></text>');
@@ -23,6 +24,22 @@ networkNode=function(n,links){
 };
 const workbenchCamera=applyNetworkCamera;
 applyNetworkCamera=function(){const svg=$('.knowledge-svg');if(svg)svg.dataset.detail=network.camera.scale>=.8?'full':'compact';workbenchCamera();};
+function readerPassageHtml(file) {
+ const notes=new Map();
+ for(const item of spaceNodes()){
+  if(item.kind!=='file')continue;
+  const name=fileNameKey(item.name);
+  notes.set(name,notes.has(name)?null:item.id);
+ }
+ let html='',offset=0;
+ for(const match of file.text.matchAll(/\[\[([^\]\n]+)\]\]/g)){
+  const [ref,alias]=match[1].split('|'),id=notes.get(fileNameKey(ref.split('#')[0]));
+  if(!id||id===file.id)continue;
+  html+=esc(file.text.slice(offset,match.index))+studioButton('focus',esc(alias||ref),id,'class="reader-reference"');
+  offset=match.index+match[0].length;
+ }
+ return html+esc(file.text.slice(offset));
+}
 let readingNode='';
 const workbenchInspector=drawInspector;
 drawInspector=function(){
@@ -30,13 +47,13 @@ drawInspector=function(){
  const node=data.files.find(f=>f.id===form.dataset.key);if(!node||!node.text)return;
  const body=form.querySelector('textarea[name=text]');if(!body)return;
  if(!el.querySelector('.reader-tabs')){
-  form.insertAdjacentHTML('beforebegin','<div class="reader-tabs" role="group" aria-label="Document mode"><button data-reader-mode="read" aria-pressed="true">Read</button><button data-reader-mode="edit" aria-pressed="false">'+(node.research?'Inspect text':'Edit')+'</button></div><section class="source-reader"><h2>'+esc(node.name)+'</h2><span class="state-tag">'+esc(objectLabel({...node,kind:'file'}))+'</span><div class="reader-content">'+esc(node.text)+'</div><button data-reader-original="'+esc(node.id)+'">Download source</button></section>');
+  form.insertAdjacentHTML('beforebegin','<div class="reader-tabs" role="group" aria-label="Document mode"><button data-reader-mode="read" aria-pressed="true">Read</button><button data-reader-mode="edit" aria-pressed="false">'+(node.research?'Inspect text':'Edit')+'</button></div><section class="source-reader"><h2>'+esc(node.name)+'</h2><span class="state-tag">'+esc(objectLabel({...node,kind:'file'}))+'</span><div class="reader-content">'+readerPassageHtml(node)+'</div><button data-reader-original="'+esc(node.id)+'">Download source</button></section>');
   el.dataset.readerMode='read';readingNode=node.id;
  }
 };
 document.addEventListener('click',event=>{
- const toggle=event.target.closest('[data-reader-mode]');if(toggle){
-  (async()=>{if(toggle.dataset.readerMode==='read'&&!await saveEditor())return;const el=$('#space-inspector');if(!el)return;el.dataset.readerMode=toggle.dataset.readerMode;el.querySelectorAll('[data-reader-mode]').forEach(b=>b.setAttribute('aria-pressed',String(b===toggle)));const n=data.files.find(f=>f.id===readingNode);if(n){el.querySelector('.reader-content').textContent=n.text;el.querySelector('.source-reader h2').textContent=n.name;}})().catch(report);
+ const toggle=event.target.closest('button[data-reader-mode]');if(toggle){
+  (async()=>{if(toggle.dataset.readerMode==='read'&&!await saveEditor())return;const el=$('#space-inspector');if(!el)return;el.dataset.readerMode=toggle.dataset.readerMode;el.querySelectorAll('[data-reader-mode]').forEach(b=>b.setAttribute('aria-pressed',String(b===toggle)));const n=data.files.find(f=>f.id===readingNode);if(n){el.querySelector('.reader-content').innerHTML=readerPassageHtml(n);el.querySelector('.source-reader h2').textContent=n.name;}})().catch(report);
  }
  const original=event.target.closest('[data-reader-original]');if(original)(async()=>{const file=data.files.find(f=>f.id===original.dataset.readerOriginal);if(!file)return;const stored=await blob(file.id);download(stored||file.text,stored?.name||file.name+'.txt',stored?.type||'text/plain');})().catch(report);
  if(event.target.closest('[data-community-compose]')){document.querySelector('.community-shell')?.classList.toggle('compose-open');document.querySelector('.compose-open textarea')?.focus();}

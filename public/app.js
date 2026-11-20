@@ -108,15 +108,21 @@ function reviewResearchDraft(draft){
   '<button type="submit" class="primary">Save reviewed claim</button><p role="status"></p></form>');
  const form = $('#claim-review'), record = data;
  const usePassage=$('#claim-use-selection'),preview=$('#claim-source-preview');
- let selectedPassage='';
+ let selectedPassage='',selectedAnchor,usedPassage;
  preview.onpointerup=preview.onkeyup=()=>{
   const selection=window.getSelection();
   selectedPassage=selection && preview.contains(selection.anchorNode) && preview.contains(selection.focusNode)?selection.toString().trim():'';
+  selectedAnchor=undefined;
+  if(selectedPassage&&selection.rangeCount){
+   const range=selection.getRangeAt(0),prefix=range.cloneRange();
+   prefix.selectNodeContents(preview);prefix.setEnd(range.startContainer,range.startOffset);
+   selectedAnchor=reviewAnchor(preview.textContent,selectedPassage,prefix.toString().length+selection.toString().length-selection.toString().trimStart().length);
+  }
   usePassage.hidden=selectedPassage.length<12 || selectedPassage.length>1200;
  };
- usePassage.onclick=()=>{form.elements.quote.value=selectedPassage;form.elements.decision.focus();};
+ usePassage.onclick=()=>{usedPassage={id:form.elements.source.value,excerpt:selectedPassage,anchor:selectedAnchor};form.elements.quote.value=selectedPassage;form.elements.decision.focus();};
  form.elements.source.onchange = () => {
-  selectedPassage='';usePassage.hidden=true;
+  selectedPassage='';usedPassage=undefined;usePassage.hidden=true;
   const source = choices.find(file=>file.id===form.elements.source.value), preview = $('#claim-source-preview');
   preview.hidden = !source;
   preview.textContent = source?.text||'';
@@ -145,7 +151,7 @@ function reviewResearchDraft(draft){
     }
     const reviewedClaim=appendResearchNode({
     name:'Claim · '+claim, text:verified?claim+'\n\nSupporting excerpt from '+source.name+':\n'+excerpt:claim,
-    state:decision, sources:verified?[source.id]:[], quotes:verified?[{id:source.id,excerpt}]:[],
+    state:decision, sources:verified?[source.id]:[], quotes:verified?[{id:source.id,excerpt,...(usedPassage?.id===source.id&&usedPassage.excerpt===excerpt&&usedPassage.anchor?{anchor:usedPassage.anchor}:{})}]:[],
     step:draft.research.step, draft:draft.id, agent:draft.research.agent, statement:claim, stepTask:draft.research.stepTask
     });
     reviewedClaim.research.decision={value:decision,rationale:String(values.get('rationale')||'').trim(),time:Date.now()};

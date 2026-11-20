@@ -4,6 +4,10 @@ For installers, checksums, and notes by build, see [GitHub Releases](https://git
 
 ## 0.2.17
 
+- Choose Atlas, Clusters, Orbit, Flow, or Freeform. Each layout remembers its camera. Orbit can center on any record. Clusters show which records share a region.
+- Trace paths, inspect the reviewed passage beside the current source, find claims affected by an edit, and save an investigation to reopen later.
+- On the Atlas, rotation draws lighter contours during a drag. The reader can follow named wiki references and return to the previous record.
+
 - Research keeps matching passages in the model input and checks their upstream evidence before saving each pass. Follow-ups remain proposals across restarts. Archived duplicates release review capacity.
 - Pan and wheel gestures move the graph immediately. Label placement checks nearby nodes after the gesture settles.
 - Select a passage directly in claim review. Package previews show the community upload size, and team workflow uploads accept up to 16 MB.

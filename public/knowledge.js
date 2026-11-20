@@ -58,7 +58,7 @@ const network = {
   search:'',types:new Set(['file','agent','task','model']),settings:false,
   focus:null,depth:1,labels:'auto',nodeScale:1,edgeOpacity:.35,
   positions:new Map(),signature:'',camera:{x:0,y:0,scale:1},drag:null,
-  hovered:null,space:null,ignoreClick:false,needFit:true
+  trail:[],hovered:null,space:null,ignoreClick:false,needFit:true
 };
 function inNetwork() { return (page==='Overview'||page==='Graph')&&activeSpace().viewMode!=='canvas'; }
 function fileNameKey(value) { return value.replace(/\.md$/i,'').trim().toLowerCase(); }
@@ -91,6 +91,7 @@ function matchesExplorerQuery(node, query) {
 }
 function networkData() {
   let nodes=spaceNodes(),links=studioLinks();
+  if(investigationStates.has(activeSpace()))return {nodes,links};
   if(network.focus) {
     const included=new Set([network.focus]);
     for(let depth=0;depth<network.depth;depth++) {
@@ -155,7 +156,7 @@ function organizedGraphPositions(nodes, links) {
 
 let arrangingGraph = false;
 async function changeGraphArrangement(undo=false){
-  if (arrangingGraph) return;
+  if (arrangingGraph || (network.layout && network.layout!=='freeform')) return;
   const workspace=activeSpace();
   const previous={positions:workspace.graphPositions,camera:workspace.graphCamera,undo:workspace.graphArrangeUndo};
   const next=new Map(network.positions);
@@ -190,9 +191,31 @@ async function changeGraphArrangement(undo=false){
 
 function calculateNetwork(force=false) {
   const nodes=spaceNodes(),links=studioLinks();
-  const signature=activeSpace().id+'|'+nodes.map(n=>n.id).join(',')+'|'+links.map(connectionKey).join(',');
+  const signature=network.layout+'|'+(network.layout==='orbit'?activeSpace().orbitRoot||'':'')+'|'+activeSpace().id+'|'+JSON.stringify(nodes.map(n=>[n.id,n.kind,n.name]))+'|'+links.map(connectionKey).join(',');
   if(signature===network.signature&&!force)return;
   network.signature=signature;
+  if(network.layout==='atlas'){
+    const {cloud,landmarks,regions}=atlasCloud(nodes,links);
+    network.cloud=cloud;network.landmarks=landmarks;network.regions=regions;
+    network.positions=projectedAtlasPositions(cloud,network.angle);
+    return;
+  }
+  if(network.layout==='clusters'){
+    const {regions}=atlasCloud(nodes,links);
+    const {positions,districts}=clusterArrangement(regions);
+    network.positions=positions;network.regions=regions;network.districts=districts;
+    return;
+  }
+  if(network.layout==='orbit'){
+    network.orbit=orbitArrangement(nodes,links,activeSpace().orbitRoot);
+    network.positions=network.orbit.positions;
+    return;
+  }
+  if(network.layout==='flow'){
+    const {positions,columns}=flowArrangement(nodes);
+    network.positions=positions;network.flowColumns=columns;
+    return;
+  }
   const saved=activeSpace().graphPositions||{};
   // Keep manual placements for large graphs without running a full force simulation.
   if (nodes.length > 180) {
@@ -271,9 +294,13 @@ function networkNode(n,links) {
 function renderNetwork() {
   ensureStudio();applyAppearance();
   const space=activeSpace();
-  if(!space.graphLayoutVersion&&!Object.keys(space.graphPositions||{}).length){delete space.graphCamera;space.graphLayoutVersion=2;network.needFit=true}
-  if(network.space!==space.id) {
-    network.positions.clear();network.signature='';network.space=space.id;network.camera=space.graphCamera||{x:0,y:0,scale:1};network.needFit=!space.graphCamera;
+  const layout=workspaceGraphLayout(space),cameraKey=graphCameraKey(layout);
+  space.graphLayout=layout;
+  if(network.space!==space.id || network.layout!==layout) {
+    if(network.space!==space.id)network.trail=[];
+    network.positions.clear();network.signature='';network.space=space.id;network.layout=layout;
+    network.camera={...(space[cameraKey]||{x:0,y:0,scale:1})};network.needFit=!space[cameraKey];
+    network.angle=Number.isFinite(space.atlasAngle)?space.atlasAngle:atlasHomeAngle;
     const options=space.graphSettings||{};network.labels=options.labels||'auto';network.nodeScale=options.nodeScale||1;network.edgeOpacity=options.edgeOpacity??.35;
   }
   calculateNetwork();
@@ -282,23 +309,30 @@ function renderNetwork() {
   const query=network.search.trim().toLowerCase();
   const explorerNodes=spaceNodes().filter(node=>matchesExplorerQuery(node,query));
   if(network.previousCount===0&&nodes.length)network.needFit=true;network.previousCount=nodes.length;
-  const selected=studioNodes().find(n=>n.id===network.focus);
+  const layoutSwitch='<div class="graph-layouts" role="group" aria-label="Graph layout">'+Object.entries(graphLayouts).map(([key,name])=>
+    networkButton('layout',name,key,'title="'+esc(graphLayoutHelp[key])+'" aria-pressed="'+(layout===key)+'"')).join('')+'</div>';
+  const investigation=investigationStates.get(space);
+  const investigateEntry=investigationButton('open','Investigate','','class="invest-entry" aria-controls="investigation-pane" aria-expanded="'+!!(investigation&&(innerWidth>760||investigation.sheet))+'"');
+  const layoutTools='<div class="graph-view-tools">'+layoutSwitch+(layout==='atlas'&&nodes.length?'<div class="atlas-orbit" role="group" aria-label="Rotate atlas">'+networkButton('turn','&#8630;','-1','aria-label="Rotate atlas left"')+'<span>Rotate</span>'+networkButton('turn','&#8631;','1','aria-label="Rotate atlas right"')+'</div>':'')+investigateEntry+'</div>';
+  const selected=!investigation&&studioNodes().find(n=>n.id===network.focus);
   $('#content').innerHTML='<header class="knowledge-header"><div class="knowledge-brand">'+brandMark()+'<div class="brand-family"><strong>Agenetic</strong><small>by Groundplanes</small></div></div><button data-command="spaces" class="knowledge-space">'+esc(space.name)+lineIcon('chevron')+'</button><div class="view-switch" aria-label="Workspace view">'+networkButton('graph',lineIcon('graph')+'Graph','','class="active" aria-pressed="true"')+networkButton('canvas',lineIcon('canvas')+'Canvas','','aria-pressed="false"')+'</div><div class="knowledge-header-actions"><span class="private-label">'+(space.id===data.exampleSpaceId?'Example data':'Local workspace')+'</span>'+networkButton('appearance',lineIcon('palette')+'Appearance','','aria-label="Appearance"')+''+networkButton('filters',lineIcon('settings'),'','aria-label="Graph settings" aria-expanded="'+network.settings+'"')+studioButton('share',lineIcon('download')+'Export','','aria-label="Export workflow"')+'</div></header>'+
   '<aside id="graph-explorer" class="knowledge-explorer" aria-label="Graph explorer"><div class="explorer-title"><span>EXPLORER</span>'+studioButton('note',lineIcon('plus'),'','aria-label="New note"')+'</div><label class="knowledge-search">'+lineIcon('search')+'<input id="knowledge-query" type="search" value="'+esc(network.search)+'" placeholder="Search this space" aria-label="Search this space"></label><div class="space-navigation">'+networkButton('all',lineIcon('graph')+'All connections','','class="'+(!network.focus?'current':'')+'"')+'</div><div class="knowledge-file-list">'+['file','agent','task','model'].map(kind=>{
     const items=explorerNodes.filter(n=>n.kind===kind);if(!items.length)return '';
     return '<details data-explorer-kind="'+kind+'" '+(space.explorerClosed?.includes(kind)?'':'open')+'><summary>'+({file:'Notes and sources',agent:'Agents',task:'Tasks',model:'Models'}[kind])+'<span>'+items.length+'</span></summary>'+items.map(n=>networkButton('open',lineIcon({file:'note',agent:'agent',task:'task',model:'model'}[kind])+'<span>'+esc(n.name)+'</span>'+(n.research?'<small class="research-state">'+esc(researchStateLabel(n))+'</small>':''),n.id,'class="'+(studio.selected.has(n.id)?'selected':'')+'"')).join('')+'</details>';
   }).join('')+(!explorerNodes.length&&query?'<p role="status">No matching items in this workspace.</p>':'')+'</div><div class="knowledge-explorer-footer">'+studioButton('import',lineIcon('folder')+'Import files')+studioButton('runtime',lineIcon('model')+'Local models')+networkButton('example',lineIcon('graph')+'Explore example space')+'</div></aside>'+
-  '<main class="network-stage" tabindex="-1" aria-label="Knowledge graph"><div class="grid-field" aria-hidden="true"></div><div class="network-context"><span>'+ (selected?'LOCAL GRAPH':'KNOWLEDGE GRAPH')+'</span><h1>'+esc(selected?selected.name.replace(/\.md$/,''):space.name)+'</h1><p id="graph-count">'+nodes.length+' nodes <span>·</span> '+links.length+' connections'+(nodes.length!==spaceNodes().length?' · '+(spaceNodes().length-nodes.length)+' hidden by this view':'')+'</p>'+(selected?'<div class="depth-control">'+networkButton('depth','1 hop','1','class="'+(network.depth===1?'active':'')+'"')+networkButton('depth','2 hops','2','class="'+(network.depth===2?'active':'')+'"')+networkButton('all','Clear focus')+'</div>':'')+'</div><svg class="knowledge-svg" role="group" aria-label="Workspace graph. Use arrow keys to move between items. Press Enter or Space to open an item.">'+orbDefinitions()+'<g class="network-world"><g class="network-edges">'+links.map(l=>{const a=network.positions.get(l.from),b=network.positions.get(l.to);return '<line class="knowledge-edge '+l.kind+'" data-source="'+esc(l.from)+'" data-target="'+esc(l.to)+'" x1="'+a[0]+'" y1="'+a[1]+'" x2="'+b[0]+'" y2="'+b[1]+'"/>'}).join('')+'</g><g class="network-nodes">'+nodes.map(n=>networkNode(n,links)).join('')+'</g></g></svg>'+
+  (investigation?'<aside id="investigation-pane" aria-label="Investigate workspace"></aside>':'')+
+  '<main class="network-stage" data-layout="'+layout+'" tabindex="-1" aria-label="Knowledge graph"><div class="grid-field" aria-hidden="true"></div><div class="network-context"><span>'+ (selected?'LOCAL GRAPH':'KNOWLEDGE GRAPH')+'</span><h1>'+esc(selected?selected.name.replace(/\.md$/,''):space.name)+'</h1><p id="graph-count">'+nodes.length+' nodes <span>·</span> '+links.length+' connections'+(nodes.length!==spaceNodes().length?' · '+(spaceNodes().length-nodes.length)+' hidden by this view':'')+'</p>'+layoutTools+'<p class="layout-hint">'+esc(graphLayoutHelp[layout])+'</p>'+(selected?'<div class="depth-control">'+networkButton('depth','1 hop','1','class="'+(network.depth===1?'active':'')+'"')+networkButton('depth','2 hops','2','class="'+(network.depth===2?'active':'')+'"')+networkButton('all','Clear focus')+'</div>':'')+'</div><svg class="knowledge-svg" role="group" aria-label="Workspace graph. Use arrow keys to move between items. Press Enter or Space to open an item.">'+(layout==='freeform'?orbDefinitions():'')+'<g class="network-world">'+graphViewUnderlay(nodes)+'<g class="network-edges">'+links.map(graphLinkMarkup).join('')+'</g><g class="network-nodes">'+nodes.map(n=>networkNode(n,links)).join('')+'</g></g></svg>'+
   (!nodes.length?'<div class="graph-empty"><h2>'+ (spaceNodes().length?'Nothing matches this view':'Add your first source')+'</h2><p>'+(spaceNodes().length?'Try another search or restore your filters.':'Drop your files into this space, write a note, or explore the example. Connections appear as you link real material.')+'</p>'+(spaceNodes().length?networkButton('reset','Reset filters'):studioButton('import','Import files')+studioButton('note','Write a note')+networkButton('example','Explore example'))+'</div>':'')+
   '<div class="edge-key" aria-label="Relationship legend"><span><i></i>Reference / wiki link</span><span><i></i>Context / assignment / model</span></div><div class="network-footer"><div class="type-filters" aria-label="Filter node types">'+['file','agent','task','model'].map(kind=>networkButton('type','<i class="type-dot '+kind+'"></i>'+({file:'Notes and sources',agent:'Agents',task:'Tasks',model:'Models'}[kind]),kind,'aria-pressed="'+network.types.has(kind)+'"')).join('')+'</div><div class="graph-navigation">'+networkButton('zoom-out',lineIcon('minus'),'','aria-label="Zoom out"')+'<span id="network-zoom"></span>'+networkButton('zoom-in',lineIcon('plus'),'','aria-label="Zoom in"')+networkButton('fit',lineIcon('fit')+'<span>Center</span>','','title="Center visible nodes · F"')+
-  networkButton('arrange',lineIcon('canvas')+'<span>Organize</span>','','title="Organize visible nodes by connections"')+
-  (space.graphArrangeUndo?networkButton('undo-arrange',lineIcon('undo'),'','aria-label="Undo graph organization" title="Undo organization"'):'')+'</div></div></main><div class="network-add">'+studioButton('note',lineIcon('note')+'Note')+studioButton('agent',lineIcon('agent')+'Agent')+studioButton('task',lineIcon('task')+'Task')+'</div>'+
+  (layout==='freeform'?networkButton('arrange',lineIcon('canvas')+'<span>Organize</span>','','title="Organize visible nodes by connections"'):'')+
+  (layout==='freeform'&&space.graphArrangeUndo?networkButton('undo-arrange',lineIcon('undo'),'','aria-label="Undo graph organization" title="Undo organization"'):'')+'</div></div></main><div class="network-add">'+studioButton('note',lineIcon('note')+'Note')+studioButton('agent',lineIcon('agent')+'Agent')+studioButton('task',lineIcon('task')+'Task')+'</div>'+
   '<aside id="space-inspector" hidden></aside><aside id="space-library" hidden></aside>'+
-  (network.settings?'<section class="graph-settings"><div class="floating-heading"><h2>Graph settings</h2>'+networkButton('filters',lineIcon('close'),'','aria-label="Close graph settings"')+'</div><label>Labels<select id="graph-labels" aria-label="Graph labels">'+['auto','always','off'].map(v=>'<option value="'+v+'" '+(network.labels===v?'selected':'')+'>'+({auto:'Visible by default',always:'Always visible',off:'Selection only'}[v])+'</option>').join('')+'</select></label><label>Node size<input id="graph-size" type="range" min="0.6" max="1.8" step="0.1" value="'+network.nodeScale+'"></label><label>Edge visibility<input id="graph-edges" type="range" min="0.08" max="0.65" step="0.01" value="'+network.edgeOpacity+'"></label><p>Node size reflects the number of connections. Drag a node to place it.</p>'+networkButton('arrange','Organize visible nodes')+'</section>':'')+
+  (network.settings?'<section class="graph-settings"><div class="floating-heading"><h2>Graph settings</h2>'+networkButton('filters',lineIcon('close'),'','aria-label="Close graph settings"')+'</div><label>Labels<select id="graph-labels" aria-label="Graph labels">'+['auto','always','off'].map(v=>'<option value="'+v+'" '+(network.labels===v?'selected':'')+'>'+({auto:'Automatic',always:'Always visible',off:'Selection only'}[v])+'</option>').join('')+'</select></label><label>Node size<input id="graph-size" type="range" min="0.6" max="1.8" step="0.1" value="'+network.nodeScale+'"></label><label>Edge visibility<input id="graph-edges" type="range" min="0.08" max="0.65" step="0.01" value="'+network.edgeOpacity+'"></label><p>'+({atlas:'Nearby records share a hub or component. The fine contours show the surface. Colored marks are records. Drag to rotate, Shift-drag to pan.',flow:'Columns group records by type. Curves follow saved links. Select a record to see the direction and kind of each connection.',clusters:graphLayoutHelp.clusters,orbit:graphLayoutHelp.orbit,freeform:'Drag a node to place it, or organize the visible nodes by their connections.'}[layout])+'</p>'+(layout==='freeform'?networkButton('arrange','Organize visible nodes'):'')+'</section>':'')+
   appearancePanel()+'<div id="connect-banner" '+(!studio.connecting?'hidden':'')+'>Choose a node to connect'+studioButton('cancel','Cancel')+'</div>';
   network.hovered=null;
+  if(investigation)renderInvestigation(investigation,nodes,links);
   observeGraphViewport(space);drawInspector();applyNetworkCamera();highlightNetwork();
-  if(network.needFit){network.needFit=false;requestAnimationFrame(fitNetwork)}
+  if(network.needFit){network.needFit=false;requestAnimationFrame(()=>{if(activeSpace()===space&&network.layout===layout&&inNetwork())fitNetwork()})}
 }
 render=function() {
   ensureStudio();
@@ -323,7 +357,7 @@ function observeGraphViewport(space){
     if(!old||!Number.isFinite(old.width)||!Number.isFinite(old.height)||network.needFit)return;
     if(width===old.width&&height===old.height)return;
     network.camera={...network.camera,x:network.camera.x+(width-old.width)/2,y:network.camera.y+(height-old.height)/2};
-    space.graphCamera={...network.camera};
+    space[graphCameraKey(network.layout)]={...network.camera};
     moveGraphCamera();
   }
   resize();
@@ -352,6 +386,8 @@ function applyNetworkCamera() {
   $('.knowledge-svg').dataset.labels=network.labels;
   $('.network-edges').style.opacity=Math.min(.9,network.edgeOpacity*1.45);
   $('.network-stage').style.setProperty('--grid-x',(c.x*.12)+'px');$('.network-stage').style.setProperty('--grid-y',(c.y*.12)+'px');
+  const stage=$('.network-stage');
+  stage.dataset.overview=String(network.layout==='atlas'&&c.scale<1.6);
   placeNetworkLabels();
 }
 const graphLabelMetrics=new WeakMap();
@@ -359,6 +395,7 @@ const graphLabelSlots=new WeakMap();
 function placeNetworkLabels() {
   const {scale,x:panX,y:panY}=network.camera;
   const groups=[...document.querySelectorAll('[data-knowledge-node]')];
+  const overview=network.layout==='atlas'&&scale<1.6&&network.labels==='auto';
   const viewport = $('.network-stage').getBoundingClientRect();
   const heading = document.querySelector('.network-context')?.getBoundingClientRect();
   const headingBoxes = heading ? [{
@@ -378,12 +415,34 @@ function placeNetworkLabels() {
     visit(box,key=>{let tile=tiles.get(key);if(!tile){tile=[];tiles.set(key,tile);}tile.push(box);});
   }
   headingBoxes.forEach(insert);
+  for(const guide of document.querySelectorAll('.orbit-guides text,.cluster-guides text')){
+    const box=guide.getBBox();
+    insert({x:panX+box.x*scale-4,y:panY+box.y*scale-3,width:box.width*scale+8,height:box.height*scale+6});
+  }
   for(const group of groups){
     const id=group.dataset.knowledgeNode,point=network.positions.get(id),r=Number(group.querySelector('.orb-body').getAttribute('r'));
     insert({id,x:(point[0]-r)*scale+panX,y:(point[1]-r)*scale+panY,width:r*2*scale,height:r*2*scale});
   }
   const overlap=(a,b)=>a.x<b.x+b.width&&a.x+a.width>b.x&&a.y<b.y+b.height&&a.y+a.height>b.y;
-  for(const group of groups) {
+  const focused=document.activeElement?.closest('[data-knowledge-node]')?.dataset.knowledgeNode;
+  // In an overview only landmarks, query hits and active labels can be visible.
+  // Keep all marker obstacles, but avoid measuring and positioning hidden text.
+  const labels=overview?groups.filter(g=>g.matches('.landmark,.invest-hit,.selected')||
+    g.dataset.knowledgeNode===focused||g.dataset.knowledgeNode===network.hovered):groups;
+  if(overview||network.layout==='orbit'||$('.knowledge-svg').classList.contains('has-investigation')){
+    const priority=g=>g.classList.contains('orbit-center')?4:g.classList.contains('invest-endpoint')?3:g.classList.contains('invest-hit')?2:Number(g.classList.contains('landmark'));
+    labels.sort((a,b)=>priority(b)-priority(a));
+  }
+  // SVG text measurements can flush layout. Read all missing metrics before writes.
+  const full=scale>=.8&&!['atlas','orbit','clusters'].includes(network.layout),fontStatus=document.fonts?.status;
+  for(const group of labels){
+    const text=group.querySelector('text'),state=full&&text.querySelector('.node-state-label');
+    const metric=graphLabelMetrics.get(text);
+    if(metric&&metric.full===!!state&&metric.fontStatus===fontStatus)continue;
+    const length=text.firstChild?.textContent.length||0;
+    graphLabelMetrics.set(text,{full:!!state,fontStatus,width:Math.max(length?text.getSubStringLength(0,length):0,state?state.getComputedTextLength():0)});
+  }
+  for(const group of labels) {
     const id=group.dataset.knowledgeNode,[worldX,worldY]=network.positions.get(id),text=group.querySelector('text');
     const r=Number(group.querySelector('.orb-body').getAttribute('r'))*scale,gap=12;
     const x=worldX*scale+panX,y=worldY*scale+panY;
@@ -391,16 +450,10 @@ function placeNetworkLabels() {
       group.classList.add('label-collision');continue;
     }
     const state = text.querySelector('.node-state-label');
-    const full = state && scale >= .8;
-    const nameLength = text.firstChild?.textContent.length || 0;
-    let metric=graphLabelMetrics.get(text);
-    if(!metric || metric.full!==!!full || metric.fontStatus!==document.fonts?.status){
-      metric={full:!!full,fontStatus:document.fonts?.status,width:Math.max(nameLength?text.getSubStringLength(0,nameLength):0,full?state.getComputedTextLength():0)};
-      graphLabelMetrics.set(text,metric);
-    }
-    const width=metric.width;
-    const height = full ? 32 : 16;
-    const candidates=[{x:r+gap,y:4},{x:-width/2,y:-r-gap},{x:-width/2,y:r+gap+height/2},{x:-r-gap-width,y:4},...[-2,2,-3,3,-4,4,-5,5,-6,6].map(step=>({x:r+gap,y:step*height}))];
+    const metric=graphLabelMetrics.get(text);
+    const width=metric.width,height=metric.full?32:16;
+    const extraSlots=network.layout==='atlas'?[]:[-2,2,-3,3,-4,4,-5,5,-6,6];
+    const candidates=[{x:r+gap,y:4},{x:-width/2,y:-r-gap},{x:-width/2,y:r+gap+height/2},{x:-r-gap-width,y:4},...extraSlots.map(step=>({x:r+gap,y:step*height}))];
     const cost=candidate=>{
       const box={x:x+candidate.x-3,y:y+candidate.y-13,width:width+6,height};
       const outside=box.x<16||box.x+box.width>viewport.width-16||box.y<16||box.y+box.height>viewport.height-100;
@@ -429,19 +482,19 @@ function placeNetworkLabels() {
       state.setAttribute('x', selected.x);
       state.setAttribute('dy', 15);
     }
-    if(!best.hits)insert(best.box);
+    if(!best.hits&&(!overview||group.matches('.landmark,.invest-hit')))insert(best.box);
     const tether=group.querySelector('.node-tether');if(tether){const tx=selected.x<0?selected.x+width/2:selected.x-4,ty=selected.y-4,d=Math.hypot(tx,ty)||1;tether.setAttribute('x1',tx/d*(r+4));tether.setAttribute('y1',ty/d*(r+4));tether.setAttribute('x2',tx);tether.setAttribute('y2',ty)}
     group.classList.toggle('label-collision',best.hits>0);
   }
 }
 function persistNetwork() {
-  activeSpace().graphCamera={...network.camera};
+  activeSpace()[graphCameraKey(network.layout)]={...network.camera};
   activeSpace().graphSettings={labels:network.labels,nodeScale:network.nodeScale,edgeOpacity:network.edgeOpacity};
   save().catch(report);
 }
-function fitNetwork() {
+function fitNetwork(onlyIds) {
   const stage=$('.network-stage');if(!stage)return;
-  const {nodes}=networkData(),bounds=stage.getBoundingClientRect();
+  const visible=networkData().nodes,nodes=onlyIds instanceof Set?visible.filter(n=>onlyIds.has(n.id)):visible,bounds=stage.getBoundingClientRect();
   if(!nodes.length)return;
   let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
   for (const node of nodes) {
@@ -452,7 +505,23 @@ function fitNetwork() {
     minY=Math.min(minY,y-35);maxY=Math.max(maxY,y+35);
   }
   if (!Number.isFinite(minX)) return;
-  const top=Math.min(160,bounds.height*.25),bottom=Math.min(80,bounds.height*.18);
+  if(!onlyIds&&network.layout==='atlas'&&!network.focus&&!network.search&&network.types.size===4){
+    // The full surface is the fit target, including its posterior lobe and stem.
+    minX=-320;maxX=320;minY=-198;maxY=228;
+  }
+  if(!onlyIds&&nodes.length===network.positions.size){
+    if(network.layout==='orbit'&&network.orbit.rings.length){
+      const r=network.orbit.rings.at(-1).radius+26;minX=-r-26;maxX=r+46;minY=-r-20;maxY=r+20;
+    }else if(network.layout==='clusters'){
+      for(const g of network.districts){
+        minX=Math.min(minX,g.x-g.radius-10);maxX=Math.max(maxX,g.x+g.radius+10);
+        minY=Math.min(minY,g.y-g.radius-32);maxY=Math.max(maxY,g.y+g.radius+10);
+      }
+    }
+  }
+  if(network.layout==='flow')minY-=30;
+  const heading=stage.querySelector('.network-context')?.getBoundingClientRect();
+  const top=Math.min(bounds.height*.42,Math.max(120,(heading?.bottom??bounds.top)-bounds.top+22)),bottom=Math.min(80,bounds.height*.18);
   const availableWidth=Math.max(1,bounds.width-48),availableHeight=Math.max(1,bounds.height-top-bottom);
   const scale=Math.max(.04,Math.min(1.4,availableWidth/(maxX-minX),availableHeight/(maxY-minY)));
   network.camera={
@@ -521,23 +590,47 @@ function highlightNetwork() {
   }
   graph.id=id;
 }
-async function openNetworkNode(id) {
+async function openNetworkNode(id,goingBack=false) {
   if(!await saveEditor())return;
-  if(!spaceNodes().some(node=>node.id===id)){toast('This item is not in the current workspace.');return;}
+  const node=spaceNodes().find(node=>node.id===id);
+  if(!node){toast('This item is not in the current workspace.');return;}
   if(studio.connecting){await connectStudio(id);return}
+  const previous=studio.inspector?[...studio.selected][0]:null;
+  if(!previous)network.trail=[];
+  else if(!goingBack&&previous!==id)network.trail=[...network.trail.slice(-31),previous];
+  if(goingBack)network.trail.pop();
   studio.selected=new Set([id]);studio.inspector=true;network.settings=false;
+  const graph=$('.knowledge-svg');
+  if(graph&&!indexedGraph(graph).nodes.has(id)){
+    network.types.add(node.kind);
+    if(!matchesExplorerQuery(node,network.search.trim().toLowerCase()))network.search='';
+    if(!networkData().nodes.some(n=>n.id===id))network.focus=null;
+    render();
+  }
   for(const row of document.querySelectorAll('.knowledge-explorer [data-network="open"]')){
     const current=row.dataset.key===id;
     row.classList.toggle('selected',current);
     if(current)row.setAttribute('aria-current','true');else row.removeAttribute('aria-current');
   }
   drawInspector();highlightNetwork();
+  const svg=$('.knowledge-svg'),panel=$('#space-inspector'),point=network.positions.get(id);
+  if(svg&&panel&&point){
+    const box=svg.getBoundingClientRect(),inspector=panel.getBoundingClientRect();
+    const right=inspector.left>box.left+120?Math.min(box.width,inspector.left-box.left):box.width;
+    const c=network.camera,px=point[0]*c.scale+c.x,py=point[1]*c.scale+c.y;
+    if(px<24||px>right-24||py<24||py>box.height-72){
+      network.camera={...c,x:c.x+right/2-px,y:c.y+box.height/2-py};applyNetworkCamera();persistNetwork();
+    }
+  }
 }
 function addNetworkInspectorTools() {
   const el=$('#space-inspector');if(!el||el.hidden)return;
   const id=[...studio.selected][0];
+  if(inNetwork()&&network.trail.length)el.querySelector('.floating-heading')?.insertAdjacentHTML('afterbegin',networkButton('back','Back','','class="graph-back" aria-label="Back to previous record"'));
+  if(inNetwork()&&id&&network.layout==='orbit'&&network.orbit.root!==id)el.insertAdjacentHTML('beforeend','<div class="inspector-actions">'+networkButton('orbit-root','Center Orbit here',id)+'</div>');
   if(inNetwork()&&id)el.insertAdjacentHTML('beforeend','<div class="inspector-actions">'+networkButton('focus',lineIcon('graph')+'Explore connections',id)+'</div>');
   const node=studioNodes().find(n=>n.id===id);
+  if(node&&inNetwork())el.insertAdjacentHTML('beforeend','<div class="inspector-actions">'+investigationButton('start','Trace from here',id)+(investigationStates.get(activeSpace())?.tab==='paths'?investigationButton('end','Trace to here',id):'')+(node.kind==='file'?investigationButton('source','Check source impact',id):'')+(node.research?investigationButton('claim','Inspect evidence',id):'')+'</div>');
   if(node){
     const count=degreeFor(node.id,studioLinks());
     const detail=node.kind==='agent'?(node.model?'Model assigned':'No model assigned'):node.kind==='task'?(node.status||'planned'):node.kind==='model'?'Registered local model':(node.text?node.text.trim().split(/\s+/).length+' words':node.text===''?'Empty note':'Original file');
@@ -585,6 +678,10 @@ function normalizeIcons() {
 async function networkAction(action,key) {
   // Camera controls do not change the editor or require a valid note.
   if(action==='fit'){fitNetwork();return}
+  if(action==='turn' && network.layout==='atlas'){
+    rotateGraphAtlas(network.angle+Number(key)*Math.PI/9,$('.knowledge-svg'));
+    activeSpace().atlasAngle=network.angle;applyNetworkCamera();persistNetwork();return;
+  }
   if(action==='zoom-in'||action==='zoom-out'){
     const stage=$('.network-stage');if(!stage)return;
     const bounds=stage.getBoundingClientRect();
@@ -595,13 +692,34 @@ async function networkAction(action,key) {
   if(!await saveEditor())return;
   if(action==='graph'||action==='canvas') {
     if(activeSpace().viewMode===action)return;
-    activeSpace().viewMode=action;network.needFit=action==='graph'&&!activeSpace().graphCamera;studio.inspector=false;studio.selected.clear();await save();
+    activeSpace().viewMode=action;network.needFit=action==='graph'&&!activeSpace()[graphCameraKey(workspaceGraphLayout(activeSpace()))];studio.inspector=false;studio.selected.clear();await save();
     if(document.startViewTransition&&appearance().motion!==false&&!matchMedia('(prefers-reduced-motion: reduce)').matches)document.startViewTransition(()=>render());else render();return;
+  }
+  if(action==='orbit-root'&&network.layout==='orbit'&&spaceNodes().some(n=>n.id===key)){
+    const space=activeSpace(),previous=space.orbitRoot;space.orbitRoot=key;
+    try{await save();}catch(error){space.orbitRoot=previous;throw error;}
+    if(activeSpace()!==space)return;
+    studio.inspector=false;studio.selected.clear();network.needFit=true;render();return;
+  }
+  if(action==='layout' && Object.hasOwn(graphLayouts,key)){
+    const space=activeSpace(),previous=space.graphLayout;
+    if(network.layout===key)return;
+    space.graphLayout=key;
+    try{await save();}catch(error){space.graphLayout=previous;throw error;}
+    if(space!==activeSpace())return;
+    render();document.querySelector('.graph-layouts [aria-pressed="true"]')?.focus({preventScroll:true});return;
   }
   if(action==='appearance'){appearanceOpen=!appearanceOpen;network.settings=false;studio.inspector=false;render();return}
   if(action==='example')return openExampleSpace();
   if(action==='open')return openNetworkNode(key);
-  if(action==='focus'){network.focus=key;network.depth=1;studio.inspector=false;network.needFit=true;render();return}
+  if(action==='back'){
+    const available=new Set(spaceNodes().map(n=>n.id));
+    network.trail=network.trail.filter(id=>available.has(id));
+    if(network.trail.length)return openNetworkNode(network.trail.at(-1),true);
+    drawInspector();return;
+  }
+  if(['focus','all','reset','type','filters'].includes(action))investigationStates.delete(activeSpace());
+  if(action==='focus'){network.search='';network.types=new Set(['file','agent','task','model']);network.focus=key;network.depth=1;studio.inspector=false;network.needFit=true;render();return}
   if(action==='all'||action==='reset'){network.focus=null;studio.selected.clear();studio.inspector=false;network.search='';network.types=new Set(['file','agent','task','model']);network.needFit=true;render();return}
   if(action==='depth'){network.depth=Number(key);network.needFit=true;render();return}
   if(action==='type'){if(network.types.has(key))network.types.delete(key);else network.types.add(key);render();return}
@@ -635,14 +753,20 @@ document.addEventListener('pointerdown',e=>{
   if(!svg||e.button!==0||!e.isPrimary||studio.connecting)return;
   const node=e.target.closest('[data-knowledge-node]'),id=node?.dataset.knowledgeNode;
   const region=id?svg.querySelector('.neural-region[data-region-node="'+CSS.escape(id)+'"]'):null;
-  network.drag={id,svg,region,pointerId:e.pointerId,x:e.clientX,y:e.clientY,camera:{...network.camera},position:id?[...network.positions.get(id)]:null,moved:false};
+  const orbit=network.layout==='atlas'&&!e.shiftKey;
+  network.drag={id:network.layout==='freeform'?id:null,orbit,angle:network.angle,svg,region,pointerId:e.pointerId,x:e.clientX,y:e.clientY,camera:{...network.camera},position:id?[...network.positions.get(id)]:null,moved:false};
 });
 document.addEventListener('pointermove',e=>{
   const d=network.drag;if(!d||d.pointerId!==e.pointerId)return;
   if(!d.svg.isConnected){network.drag=null;return}
   const dx=e.clientX-d.x,dy=e.clientY-d.y;if(!d.moved&&Math.hypot(dx,dy)<4)return;
   if(!d.moved){d.moved=true;if(d.svg.hasPointerCapture&&d.svg.isConnected&&e.buttons===1)d.svg.setPointerCapture(e.pointerId)}
-  if(d.id) {
+  if(d.orbit){
+    d.nextAngle=d.angle+dx*.007;
+    if(!d.frame)d.frame=requestAnimationFrame(()=>{
+      d.frame=0;if(network.drag===d&&d.svg.isConnected)rotateGraphAtlas(d.nextAngle,d.svg,true);
+    });
+  } else if(d.id) {
     const p=[d.position[0]+dx/d.camera.scale,d.position[1]+dy/d.camera.scale];network.positions.set(d.id,p);
     const graph=indexedGraph(d.svg);
     if(d.region){d.region.setAttribute('cx',p[0]);d.region.setAttribute('cy',p[1])}
@@ -657,6 +781,10 @@ function endGraphGesture(event){
   const d=network.drag;if(!d||d.pointerId!==event.pointerId)return;
   network.drag=null;if(!d.moved||!d.svg.isConnected)return;
   network.ignoreClick=true;setTimeout(()=>network.ignoreClick=false,100);
+  if(d.orbit){
+    cancelAnimationFrame(d.frame);
+    rotateGraphAtlas(d.nextAngle??d.angle,d.svg);activeSpace().atlasAngle=network.angle;
+  }
   if(d.id)activeSpace().graphPositions=Object.fromEntries(network.positions);
   applyNetworkCamera();persistNetwork();
 }
@@ -670,7 +798,7 @@ document.addEventListener('wheel',e=>{
   const pixels=Math.max(-320,Math.min(320,e.deltaY*unit));
   zoomNetwork(Math.exp(-pixels*.001),e.clientX-b.left,e.clientY-b.top,true);
   // Navigation may replace the workspace before the throttled disk write.
-  activeSpace().graphCamera={...network.camera};
+  activeSpace()[graphCameraKey(network.layout)]={...network.camera};
   clearTimeout(network.cameraTimer);
   network.cameraTimer=setTimeout(()=>{
     if(svg.isConnected)applyNetworkCamera();

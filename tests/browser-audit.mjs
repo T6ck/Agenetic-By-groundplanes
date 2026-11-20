@@ -26,6 +26,272 @@ async function check(name,run){await run();checks.push(name);console.log('PASS '
 try{
  await page.goto('http://127.0.0.1:'+server.address().port);
  await page.waitForSelector('.knowledge-node');
+ if(process.env.AGENETIC_GRAPH_BENCHMARK==='1'){
+  const metrics=await page.evaluate(async()=>{
+   const original=data,rows=[];
+   const stats=times=>{
+    times.sort((a,b)=>a-b);
+    return {medianMs:+times[Math.floor(times.length/2)].toFixed(1),p95Ms:+times[Math.ceil(times.length*.95)-1].toFixed(1),samples:times.length};
+   };
+   try{
+    for(const count of [600,1200,10000]){
+     const files=Array.from({length:count},(_,i)=>({id:'n'+i,name:'Field interview '+i,kind:'file',text:'Field notes.'}));
+     const links=files.flatMap((n,i)=>[i+1,i+17].filter(j=>j<count).map(j=>({from:n.id,to:files[j].id,kind:'reference'})));
+     const pathTimes=[];
+     for(let i=0;i<33;i++){
+      const t=performance.now(),result=shortestGraphRoutes(files,links,'n0','n'+(count-1),'forward');
+      if(!result.routes.length)throw Error('Unreachable benchmark destination');
+      if(i>=3)pathTimes.push(performance.now()-t);
+     }
+     const row={records:count,links:links.length,path:stats(pathTimes)};
+     if(count<=1200){
+      data=freshProfile('Atlas benchmark');data.files=files;data.links=links;ensureStudio();
+      activeSpace().graphLayout='atlas';activeSpace().atlasCamera={x:460,y:350,scale:.9};
+      network.space=null;network.signature='';network.focus=null;network.search='';render();
+      await document.fonts.ready;await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+      const svg=document.querySelector('.knowledge-svg'),times=[],labels=[];
+      for(let i=0;i<14;i++){
+       const t=performance.now();rotateGraphAtlas(atlasHomeAngle+i*.02,svg,true);
+       const t1=performance.now();placeNetworkLabels();const t2=performance.now();
+       if(i>=2){times.push(t1-t);labels.push(t2-t1);}
+       await new Promise(requestAnimationFrame);
+      }
+      const start=performance.now();rotateGraphAtlas(network.angle,svg);
+      const finished=performance.now();placeNetworkLabels();
+      row.releaseMs=+(performance.now()-start).toFixed(1);row.releaseGeometryMs=+(finished-start).toFixed(1);
+      Object.assign(row,{orbitUpdate:stats(times),labelPlacement:stats(labels),svgNodes:svg.querySelectorAll('*').length});
+     }
+     rows.push(row);
+    }
+    return rows;
+   }finally{data=original;network.space=null;network.signature='';render();}
+  });
+  console.log('GRAPH BENCHMARK '+JSON.stringify(metrics));
+  await writeFile(out+'/investigation-benchmark.json',JSON.stringify(metrics,null,2));
+ }
+ await check('atlas rotates actual records, Flow preserves links, and Freeform retains manual positions',async()=>{
+  const layout=async key=>{
+    await page.locator('.graph-layouts [data-key="'+key+'"]').click();
+    await page.locator('.network-stage[data-layout="'+key+'"]').waitFor();
+  };
+  await page.locator('.network-stage[data-layout=atlas]').waitFor();
+  const ids=await page.locator('.knowledge-node').evaluateAll(nodes=>nodes.map(n=>n.dataset.knowledgeNode));
+  const count=await page.locator('.knowledge-edge').count();
+  const first=page.locator('.knowledge-node').first(),before=await first.getAttribute('transform');
+  await page.locator('[aria-label="Rotate atlas right"]').click();
+  assert.notEqual(await first.getAttribute('transform'),before);
+  await page.evaluate(()=>{appearance().theme='graphite';render();});
+  await page.screenshot({path:out+'/atlas-dark.png'});
+  const angle=await page.evaluate(()=>activeSpace().atlasAngle);
+  await layout('flow');
+  assert.equal(await page.locator('.flow-columns text').count(),3);
+  assert.equal(await page.locator('path.knowledge-edge').count(),count);
+  const source=page.locator('.knowledge-file-list [data-network=open]').first();
+  await source.click();
+  await page.waitForSelector('#space-inspector:not([hidden])');
+  assert.ok(await page.locator('.knowledge-edge.related').count()>0);
+  const origin=await page.locator('.source-reader h2').innerText();
+  const reference=page.locator('.source-reader .reader-reference').first();
+  const target=await reference.innerText();await reference.click();
+  await page.waitForFunction(name=>document.querySelector('.source-reader h2')?.textContent===name,target);
+  await page.locator('[aria-label="Back to previous record"]').click();
+  await page.waitForFunction(name=>document.querySelector('.source-reader h2')?.textContent===name,origin);
+  await page.screenshot({path:out+'/flow-inspection.png'});
+  await page.locator('[aria-label="Close inspector"]').click();
+  await layout('freeform');
+  await page.locator('[data-network="arrange"]').first().click();
+  await page.locator('[data-network="undo-arrange"]').waitFor();
+  const manual=await page.evaluate(()=>JSON.stringify(activeSpace().graphPositions));
+  await layout('atlas');
+  assert.equal(await page.evaluate(()=>network.angle),angle);
+  assert.deepEqual(await page.locator('.knowledge-node').evaluateAll(nodes=>nodes.map(n=>n.dataset.knowledgeNode)),ids);
+  await page.reload();await page.locator('.network-stage[data-layout=atlas]').waitFor();
+  assert.equal(await page.evaluate(()=>network.angle),angle);
+  assert.equal(await page.evaluate(()=>JSON.stringify(activeSpace().graphPositions)),manual);
+  await page.evaluate(()=>{appearance().theme='porcelain';render()});
+  await page.screenshot({path:out+'/atlas-light.png'});
+ });
+ await check('all five graph designs keep the same records, investigation and keyboard targets, and Orbit remembers its center',async()=>{
+  const layouts=page.locator('.graph-layouts button'),pane=page.locator('#investigation-pane');
+  assert.equal(await layouts.count(),5);
+  await page.locator('.invest-entry').click();
+  const ids=async()=>page.locator('.knowledge-node').evaluateAll(ns=>ns.map(n=>n.dataset.knowledgeNode).sort());
+  const original=await ids(),edges=await page.locator('.knowledge-edge').count();
+  for(const name of ['clusters','orbit','flow','freeform','atlas']){
+    await page.locator('.graph-layouts [data-key='+name+']').click();
+    await page.locator('.network-stage[data-layout='+name+']').waitFor();
+    assert.deepEqual(await ids(),original);assert.equal(await page.locator('.knowledge-edge').count(),edges);
+    assert.ok(await page.locator('.invest-link').count()>0);
+    assert.equal(await page.locator('.knowledge-node[tabindex="0"]').count(),1);
+  }
+  await pane.locator('[data-invest=close]').click();
+  await page.locator('.graph-layouts [data-key=orbit]').click();
+  const target=await page.locator('.atlas-record:not(.orbit-center)').first().getAttribute('data-knowledge-node');
+  await page.locator('.knowledge-file-list [data-network=open][data-key="'+target+'"]').click();
+  await page.locator('[data-network=orbit-root]').click();
+  await page.waitForFunction(id=>network.orbit.root===id,target);
+  await page.reload();await page.locator('.network-stage[data-layout=orbit]').waitFor();
+  assert.equal(await page.locator('.orbit-center').getAttribute('data-knowledge-node'),target);
+  await page.setViewportSize({width:390,height:844});
+  for(const name of ['clusters','orbit','flow','freeform','atlas']){
+    const control=page.locator('.graph-layouts [data-key='+name+']');await control.click();
+    await page.locator('.network-stage[data-layout='+name+']').waitFor();
+    const box=await control.boundingBox();assert.ok(box.x>=0&&box.x+box.width<=391);
+  }
+  await page.setViewportSize({width:1440,height:1000});
+ });
+ await check('Investigate explains a live route, restores the query after reload and detects a missing endpoint',async()=>{
+  const baseline=await page.evaluate(()=>structuredClone(data));
+  try{
+   const pane=page.locator('#investigation-pane'),entry=page.locator('.invest-entry');
+   await page.locator('#knowledge-query').fill('Project brief');
+   await entry.click();await pane.waitFor();
+   assert.ok(await page.locator('.invest-link').count()>=1);
+   assert.equal(await pane.locator('.invest-steps li').count(),await page.locator('.invest-link').count()+1);
+   await page.evaluate(()=>{appearance().theme='graphite';render();});
+   await pane.locator('[data-invest=frame]').click();
+   await page.screenshot({path:out+'/investigation-path.png'});
+   const to=await page.locator('#invest-to').inputValue();
+   await pane.locator('[data-invest=save]').click();
+   await page.locator('#save-investigation [name=name]').fill('Trace interview workflow');
+   await page.locator('#save-investigation button[type=submit]').click();
+   await pane.locator('[data-invest=restore]').waitFor();
+   await pane.locator('[data-invest=close]').click();
+   assert.equal(await page.locator('#knowledge-query').inputValue(),'Project brief');
+   await page.reload();await entry.click();await pane.locator('summary').click();
+   await pane.locator('[data-invest=restore]').click();assert.equal(await page.locator('#invest-to').inputValue(),to);
+   await page.evaluate(async id=>{(activeSpace().hidden??=[]).push(id);await save();render();},to);
+   assert.match(await pane.innerText(),/endpoint is unavailable/);
+   assert.equal(await page.locator('.invest-link').count(),0);
+   assert.equal(await page.locator('#invest-to option:checked').innerText(),'Record unavailable');
+  }finally{await page.evaluate(async base=>{data=base;network.search='';await save();render();},baseline);}
+ });
+ await check('region membership lights actual records and stays aligned while rotating or framing on mobile',async()=>{
+  const pane=page.locator('#investigation-pane'),entry=page.locator('.invest-entry');
+  await entry.click();await pane.locator('[data-invest=tab][data-key=regions]').click();
+  const rows=await pane.locator('.region-members li').count();
+  assert.ok(rows>0);assert.equal(await page.locator('.invest-hit').count(),rows);
+  const shape=page.locator('.invest-territory'),before=await shape.getAttribute('d');
+  await page.locator('[aria-label="Rotate atlas right"]').click();assert.notEqual(await shape.getAttribute('d'),before);
+  await page.screenshot({path:out+'/investigation-region.png'});
+  await page.setViewportSize({width:390,height:844});await pane.locator('[data-invest=frame]').click();
+  assert.equal(await pane.isVisible(),false);assert.ok(await page.locator('.invest-hit').count()>0);
+  await entry.click();await pane.waitFor();assert.equal(await pane.locator('.region-members li').count(),rows);
+  await pane.locator('[data-invest=close]').click();await page.setViewportSize({width:1440,height:1000});
+ });
+ await check('a selected repeated passage opens its reviewed version beside the changed source and respects hidden sources',async()=>{
+  const baseline=await page.evaluate(()=>structuredClone(data));
+  try{
+   const exact='the interviews were held on site';
+   await page.evaluate(quote=>{
+    const source={id:'fixture-interview',name:'Field interview transcript',text:'North cohort: '+quote+'.\nSouth cohort: '+quote+'.'};
+    data.files.push(source);activeSpace().members.push(source.id);
+    const draft=appendResearchNode({name:'Interview method draft',text:'Investigate where the interviews took place.',state:'pending',sources:[source.id]});
+    render();reviewResearchDraft(draft);
+   },exact);
+   const form=page.locator('#claim-review');
+   await form.locator('[name=source]').selectOption('fixture-interview');
+   await page.evaluate(exact=>{
+    const pre=document.querySelector('#claim-source-preview'),offset=pre.textContent.lastIndexOf(exact),range=document.createRange();
+    range.setStart(pre.firstChild,offset);range.setEnd(pre.firstChild,offset+exact.length);
+    getSelection().removeAllRanges();getSelection().addRange(range);pre.dispatchEvent(new Event('pointerup'));
+   },exact);
+   await form.locator('#claim-use-selection').click();
+   await form.locator('[name=claim]').fill('The south cohort was interviewed on site.');
+   await form.locator('[name=decision]').selectOption('supported');await form.locator('[type=submit]').click();
+   await form.waitFor({state:'hidden'});
+   const claim=await page.evaluate(()=>data.files.find(f=>f.research?.statement==='The south cohort was interviewed on site.').id);
+   const pane=page.locator('#investigation-pane');
+   await page.locator('.invest-entry').click();await pane.locator('[data-invest=tab][data-key=evidence]').click();
+   await page.locator('#invest-claim').selectOption(claim);
+   assert.match(await pane.innerText(),/Eligible research source/);
+   await page.evaluate(()=>{data.files.find(f=>f.id==='fixture-interview').text='Correction: the south cohort met by phone.';render();});
+   assert.match(await pane.innerText(),/Needs a source check/);await pane.locator('[data-invest=compare]').click();
+   assert.equal(await page.locator('.quote-window mark').count(),1);
+   assert.match(await page.locator('.quote-comparison').innerText(),/absent/);
+   assert.match(await page.locator('.quote-window mark').evaluate(mark=>mark.previousSibling.textContent),/South cohort/);
+   await page.screenshot({path:out+'/investigation-evidence.png'});
+   await page.locator('#dialog [data-act=close]').click();
+   await pane.locator('[data-invest=tab][data-key=impact]').click();
+   await pane.locator('#invest-source').selectOption('fixture-interview');
+   assert.match(await pane.innerText(),/1 needs a source check/);
+   await pane.locator('[data-invest=affected]').click();
+   await pane.locator('[data-invest=review]').click();
+   assert.equal(await form.locator('[name=claim]').inputValue(),'The south cohort was interviewed on site.');
+   assert.equal(await form.locator('[name=decision]').inputValue(),'');
+   assert.match(await form.locator('#claim-source-preview').innerText(),/by phone/);
+   await form.locator('[name=decision]').selectOption('unresolved');
+   await form.locator('[type=submit]').click();await form.waitFor({state:'hidden'});
+   assert.equal(await page.evaluate(id=>data.files.find(f=>f.id===id).research.state,claim),'superseded');
+   assert.ok(await page.evaluate(()=>data.files.some(f=>f.research?.state==='unresolved'&&f.research.statement==='The south cohort was interviewed on site.')));
+   await page.evaluate(()=>{(activeSpace().hidden??=[]).push('fixture-interview');render();});
+   assert.match(await pane.innerText(),/Source unavailable/);assert.equal(await pane.locator('[data-invest=compare]').count(),0);
+  }finally{await page.evaluate(async base=>{data=base;await save();render();},baseline);}
+ });
+ await check('failed investigation saves can be retried and named investigations stay in their own workspace',async()=>{
+  const base=await page.evaluate(()=>structuredClone(data));
+  try{
+   const pane=page.locator('#investigation-pane');await page.locator('.invest-entry').click();
+   await pane.locator('[data-invest=save]').click();await page.locator('#save-investigation input').fill('Source trace');
+   await page.evaluate(()=>{const prior=save;save=async()=>{save=prior;throw Error('Fixture write failure');};});
+   await page.locator('#save-investigation [type=submit]').click();
+   assert.match(await page.locator('#save-investigation [role=status]').innerText(),/Save failed/);
+   assert.equal(await page.evaluate(()=>activeSpace().graphInvestigations?.length||0),0);
+   await page.locator('#save-investigation [type=submit]').click();
+   await pane.locator('[data-invest=restore]').waitFor();
+   const previous=await page.evaluate(()=>{
+    const id=activeSpace().id;data.spaces.push({id:'second-vault',name:'Another workspace',members:[],positions:{},groups:[]});
+    data.activeSpace='second-vault';render();return id;
+   });
+   assert.equal(await pane.count(),0);await page.locator('.invest-entry').click();
+   assert.equal(await pane.locator('[data-invest=restore]').count(),0);
+   await page.evaluate(id=>{data.activeSpace=id;render();},previous);
+   assert.equal(await pane.locator('[data-invest=restore]').count(),1);
+  }finally{await page.evaluate(async value=>{data=value;await save();render();},base);}
+ });
+ await check('a large endpoint picker searches the entire workspace while keeping the option list bounded',async()=>{
+  const source=await page.evaluate(()=>structuredClone(data));
+  try{
+   await page.evaluate(()=>{
+    const ids=[];
+    for(let i=0;i<150;i++){
+     const id='transcript-'+i;ids.push(id);data.files.push({id,name:'Transcript '+i,text:'Interview.'});
+    }
+    activeSpace().members.push(...ids);data.links.push({from:ids[0],to:ids.at(-1)});render();
+   });
+   await page.locator('.invest-entry').click();
+   assert.ok(await page.locator('#invest-to option').count()<=62);
+   await page.locator('[data-invest-filter=invest-from]').fill('Transcript 0');
+   await page.locator('#invest-from').selectOption('transcript-0');
+   await page.locator('[data-invest-filter=invest-to]').fill('Transcript 149');
+   await page.locator('#invest-to').selectOption('transcript-149');
+   assert.equal(await page.locator('.invest-link').count(),1);
+   await page.locator('.invest-steps [data-key=transcript-149]').click();
+   await page.locator('#space-inspector [data-invest=end]').click();
+   assert.equal(await page.locator('#invest-to').inputValue(),'transcript-149');
+  }finally{await page.evaluate(async base=>{data=base;await save();render();},source);}
+ });
+ await check('a search result can recover its neighbors, including on a narrow Atlas',async()=>{
+  const note='Project brief';
+  await page.locator('#knowledge-query').fill(note);
+  await page.locator('.knowledge-file-list [data-network=open]').filter({hasText:note}).first().click();
+  await page.locator('#space-inspector [data-network=focus]').click();
+  await page.waitForFunction(()=>network.focus && network.search==='');
+  assert.ok(await page.locator('.knowledge-edge').count()>0);
+  await page.locator('.depth-control [data-network=all]').click();
+  await page.setViewportSize({width:390,height:844});
+  await page.locator('[data-network=fit]').click();
+  await page.locator('[aria-label="Rotate atlas left"]').click();
+  await page.locator('.graph-layouts [data-key=flow]').click();
+  await page.locator('.network-stage[data-layout=flow]').waitFor();
+  await page.locator('.graph-layouts [data-key=atlas]').click();
+  await page.locator('.network-stage[data-layout=atlas]').waitFor();
+  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+  assert.doesNotMatch(await page.locator('#toast').textContent(),/Cannot set properties/);
+  await page.screenshot({path:out+'/atlas-mobile.png'});
+  await page.setViewportSize({width:1440,height:1000});
+  await page.locator('[data-network=fit]').click();
+ });
  await check('dense graph keeps labels and the cursor anchor stable through a wheel burst', async()=>{
   const result=await page.evaluate(async()=>{
    const svg=document.querySelector('.knowledge-svg');

@@ -51,12 +51,12 @@ try{
       await document.fonts.ready;await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
       const svg=document.querySelector('.knowledge-svg'),times=[],labels=[];
       for(let i=0;i<14;i++){
-       const t=performance.now();rotateGraphAtlas(atlasHomeAngle+i*.02,svg,true);
+       const t=performance.now();network.orientation=homeOrientation(atlasHomeAngle+i*.02);paintSpatialGraph(svg,true);
        const t1=performance.now();placeNetworkLabels();const t2=performance.now();
        if(i>=2){times.push(t1-t);labels.push(t2-t1);}
        await new Promise(requestAnimationFrame);
       }
-      const start=performance.now();rotateGraphAtlas(network.angle,svg);
+      const start=performance.now();paintSpatialGraph(svg);
       const finished=performance.now();placeNetworkLabels();
       row.releaseMs=+(performance.now()-start).toFixed(1);row.releaseGeometryMs=+(finished-start).toFixed(1);
       Object.assign(row,{orbitUpdate:stats(times),labelPlacement:stats(labels),svgNodes:svg.querySelectorAll('*').length});
@@ -75,14 +75,14 @@ try{
     await page.locator('.network-stage[data-layout="'+key+'"]').waitFor();
   };
   await page.locator('.network-stage[data-layout=atlas]').waitFor();
-  const ids=await page.locator('.knowledge-node').evaluateAll(nodes=>nodes.map(n=>n.dataset.knowledgeNode));
+  const ids=await page.locator('.knowledge-node').evaluateAll(nodes=>nodes.map(n=>n.dataset.knowledgeNode).sort());
   const count=await page.locator('.knowledge-edge').count();
   const first=page.locator('.knowledge-node').first(),before=await first.getAttribute('transform');
-  await page.locator('[aria-label="Rotate atlas right"]').click();
+  await page.getByRole('combobox',{name:'3D view angle'}).selectOption('right');
   assert.notEqual(await first.getAttribute('transform'),before);
   await page.evaluate(()=>{appearance().theme='graphite';render();});
   await page.screenshot({path:out+'/atlas-dark.png'});
-  const angle=await page.evaluate(()=>activeSpace().atlasAngle);
+  const angle=await page.evaluate(()=>activeSpace().atlasOrientation);
   await layout('flow');
   assert.equal(await page.locator('.flow-columns text').count(),3);
   assert.equal(await page.locator('path.knowledge-edge').count(),count);
@@ -103,21 +103,95 @@ try{
   await page.locator('[data-network="undo-arrange"]').waitFor();
   const manual=await page.evaluate(()=>JSON.stringify(activeSpace().graphPositions));
   await layout('atlas');
-  assert.equal(await page.evaluate(()=>network.angle),angle);
-  assert.deepEqual(await page.locator('.knowledge-node').evaluateAll(nodes=>nodes.map(n=>n.dataset.knowledgeNode)),ids);
+  assert.ok(await page.evaluate(q=>network.orientation.every((v,i)=>Math.abs(v-q[i])<1e-10),angle));
+  assert.deepEqual(await page.locator('.knowledge-node').evaluateAll(nodes=>nodes.map(n=>n.dataset.knowledgeNode).sort()),ids);
   await page.reload();await page.locator('.network-stage[data-layout=atlas]').waitFor();
-  assert.equal(await page.evaluate(()=>network.angle),angle);
+  assert.ok(await page.evaluate(q=>network.orientation.every((v,i)=>Math.abs(v-q[i])<1e-10),angle));
   assert.equal(await page.evaluate(()=>JSON.stringify(activeSpace().graphPositions)),manual);
   await page.evaluate(()=>{appearance().theme='porcelain';render()});
   await page.screenshot({path:out+'/atlas-light.png'});
  });
- await check('all five graph designs keep the same records, investigation and keyboard targets, and Orbit remembers its center',async()=>{
+ await check('vertical drags, roll and record pulls move the visible geometry and keep real links attached',async()=>{
+  const angle=page.getByRole('combobox',{name:'3D view angle'});
+  const svg=page.locator('.knowledge-svg');
+  const snapshot=()=>page.evaluate(()=>{
+    const svg=document.querySelector('.knowledge-svg'),nodes={},edges={};
+    for(const node of svg.querySelectorAll('.knowledge-node')){
+      const m=node.transform.baseVal.consolidate().matrix;
+      nodes[node.dataset.knowledgeNode]=[m.e,m.f];
+    }
+    for(const edge of svg.querySelectorAll('.knowledge-edge')){
+      const a=edge.getPointAtLength(0),b=edge.getPointAtLength(edge.getTotalLength());
+      const {source,target,kind}=edge.dataset;
+      if(Math.hypot(a.x-nodes[source][0],a.y-nodes[source][1])>.15||Math.hypot(b.x-nodes[target][0],b.y-nodes[target][1])>.15)throw Error('Detached '+source+' → '+target);
+      edges[[source,target,kind]]=edge.getAttribute('d');
+    }
+    return {nodes,edges,q:network.orientation,face:svg.querySelector('#solid-file').innerHTML};
+  });
+  const saveShot=async name=>{await page.screenshot({path:out+'/'+name+'.png'});};
+  await angle.selectOption('reset');
+  await page.locator('[data-network=fit]').first().click();
+  await page.mouse.move(2,2);
+  const initial=await snapshot();await saveShot('atlas-front');
+  const box=await svg.boundingBox(),x=box.x+box.width*.65,y=box.y+box.height*.54;
+  await page.mouse.move(x,y);await page.mouse.down();await page.mouse.move(x,y+140,{steps:10});await page.mouse.up();
+  const pitched=await snapshot();assert.notDeepEqual(pitched.q,initial.q);assert.notDeepEqual(pitched.edges,initial.edges);assert.notEqual(pitched.face,initial.face);
+  const ids=Object.keys(initial.nodes);
+  assert.ok(ids.some(id=>Math.abs(pitched.nodes[id][1]-initial.nodes[id][1])>25));
+  await page.mouse.move(2,2);await saveShot('atlas-tilt');
+  await page.keyboard.down('Alt');await page.mouse.move(x,y);await page.mouse.down();await page.mouse.move(x+105,y,{steps:8});await page.mouse.up();await page.keyboard.up('Alt');
+  const rolled=await snapshot();assert.notDeepEqual(rolled.q,pitched.q);
+  await page.mouse.move(2,2);await saveShot('atlas-roll');
+  await page.keyboard.down('Shift');await page.mouse.move(x,y);await page.mouse.down();await page.mouse.move(x+30,y+21,{steps:4});await page.mouse.up();await page.keyboard.up('Shift');
+  assert.deepEqual((await snapshot()).q,rolled.q);
+  await angle.selectOption('reset');
+  await page.locator('.graph-layouts [data-key=spatial]').click();await page.locator('.network-stage[data-layout=spatial]').waitFor();
+  await page.mouse.move(2,2);await saveShot('spatial-home');
+  await angle.selectOption('up');await angle.selectOption('right');await saveShot('spatial-turned');
+  const start=await snapshot();
+  const hit=await page.evaluate(()=>{
+    const graph=indexedGraph(document.querySelector('.knowledge-svg'));
+    for(const [id,el] of [...graph.nodes].sort((a,b)=>graph.edges.get(b[0]).length-graph.edges.get(a[0]).length)){
+      const {e:x,f:y}=el.getScreenCTM();
+      if(!graph.edges.get(id).length||document.elementFromPoint(x,y)?.closest('.knowledge-node')!==el)continue;
+      const weights=neighborWeights(graph,id);
+      if([...weights.values()].includes(.42))return {id,x,y,weights:[...weights]};
+    }
+  });
+  assert.ok(hit,'a visible connected record must be draggable');
+  await page.mouse.move(hit.x,hit.y);
+  const traces=await page.locator('.spatial-signals mpath').evaluateAll(paths=>paths.map(p=>document.querySelector(p.getAttribute('href'))?.classList.contains('related')));
+  assert.ok(traces.length>0&&traces.every(Boolean));
+  await page.mouse.move(hit.x,hit.y);await page.mouse.down();await page.mouse.move(hit.x+82,hit.y-46,{steps:10});
+  await page.waitForFunction(()=>!!network.pull);
+  const pulled=await snapshot(),dist=(id,a,b)=>Math.hypot(...a.nodes[id].map((v,i)=>v-b.nodes[id][i]));
+  const travel=dist(hit.id,pulled,start);assert.ok(travel>40);
+  for(const [id,w] of hit.weights.filter(([,w])=>w===.42)){
+    const motion=dist(id,pulled,start);assert.ok(motion>3&&motion<travel);
+  }
+  for(const id of Object.keys(start.nodes))if(!hit.weights.some(([member])=>member===id))assert.deepEqual(pulled.nodes[id],start.nodes[id]);
+  assert.notDeepEqual(pulled.edges,start.edges);await saveShot('spatial-pull');
+  await page.mouse.up();await page.waitForFunction(()=>!network.pull);
+  assert.deepEqual((await snapshot()).nodes,start.nodes);
+  assert.equal(await page.locator('#space-inspector:visible').count(),0);
+  await page.emulateMedia({reducedMotion:'reduce'});
+  await page.mouse.move(1,1);await page.mouse.move(hit.x,hit.y);
+  await page.waitForFunction(()=>matchMedia('(prefers-reduced-motion: reduce)').matches&&document.querySelectorAll('.spatial-signals mpath').length===0);
+  await page.mouse.down();await page.mouse.move(hit.x+28,hit.y-16,{steps:3});await page.mouse.up();
+  assert.equal(await page.evaluate(()=>network.pull),null);
+  await page.emulateMedia({reducedMotion:'no-preference'});
+  await page.reload();await page.locator('.network-stage[data-layout=spatial]').waitFor();
+  const restored=await snapshot();
+  assert.ok(restored.q.every((v,i)=>Math.abs(v-start.q[i])<1e-10));
+  await page.locator('.graph-layouts [data-key=atlas]').click();await page.locator('.network-stage[data-layout=atlas]').waitFor();
+ });
+ await check('all six graph designs keep the same records, investigation and keyboard targets, and Orbit remembers its center',async()=>{
   const layouts=page.locator('.graph-layouts button'),pane=page.locator('#investigation-pane');
-  assert.equal(await layouts.count(),5);
+  assert.equal(await layouts.count(),6);
   await page.locator('.invest-entry').click();
   const ids=async()=>page.locator('.knowledge-node').evaluateAll(ns=>ns.map(n=>n.dataset.knowledgeNode).sort());
   const original=await ids(),edges=await page.locator('.knowledge-edge').count();
-  for(const name of ['clusters','orbit','flow','freeform','atlas']){
+  for(const name of ['spatial','clusters','orbit','flow','freeform','atlas']){
     await page.locator('.graph-layouts [data-key='+name+']').click();
     await page.locator('.network-stage[data-layout='+name+']').waitFor();
     assert.deepEqual(await ids(),original);assert.equal(await page.locator('.knowledge-edge').count(),edges);
@@ -133,7 +207,7 @@ try{
   await page.reload();await page.locator('.network-stage[data-layout=orbit]').waitFor();
   assert.equal(await page.locator('.orbit-center').getAttribute('data-knowledge-node'),target);
   await page.setViewportSize({width:390,height:844});
-  for(const name of ['clusters','orbit','flow','freeform','atlas']){
+  for(const name of ['spatial','clusters','orbit','flow','freeform','atlas']){
     const control=page.locator('.graph-layouts [data-key='+name+']');await control.click();
     await page.locator('.network-stage[data-layout='+name+']').waitFor();
     const box=await control.boundingBox();assert.ok(box.x>=0&&box.x+box.width<=391);
@@ -172,7 +246,7 @@ try{
   const rows=await pane.locator('.region-members li').count();
   assert.ok(rows>0);assert.equal(await page.locator('.invest-hit').count(),rows);
   const shape=page.locator('.invest-territory'),before=await shape.getAttribute('d');
-  await page.locator('[aria-label="Rotate atlas right"]').click();assert.notEqual(await shape.getAttribute('d'),before);
+  await page.getByRole('combobox',{name:'3D view angle'}).selectOption('right');assert.notEqual(await shape.getAttribute('d'),before);
   await page.screenshot({path:out+'/investigation-region.png'});
   await page.setViewportSize({width:390,height:844});await pane.locator('[data-invest=frame]').click();
   assert.equal(await pane.isVisible(),false);assert.ok(await page.locator('.invest-hit').count()>0);
@@ -281,7 +355,7 @@ try{
   await page.locator('.depth-control [data-network=all]').click();
   await page.setViewportSize({width:390,height:844});
   await page.locator('[data-network=fit]').click();
-  await page.locator('[aria-label="Rotate atlas left"]').click();
+  await page.getByRole('combobox',{name:'3D view angle'}).selectOption('left');
   await page.locator('.graph-layouts [data-key=flow]').click();
   await page.locator('.network-stage[data-layout=flow]').waitFor();
   await page.locator('.graph-layouts [data-key=atlas]').click();

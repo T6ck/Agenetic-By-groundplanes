@@ -324,18 +324,46 @@ html body .network-stage[data-layout=atlas] .node-state-label { display: none; }
   font: 600 13px var(--font-sans);
   letter-spacing: .015em;
 }
-.atlas-orbit {
+.graph-view-tools select.graph-angle {
+  width: auto;
+  flex: 0 0 auto;
+  margin: 0;
   pointer-events: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  background: var(--ax-panel);
+  min-height: 34px;
+  padding: 3px 7px;
   border: 1px solid var(--ax-line);
   border-radius: 7px;
-  color: var(--ax-muted);
-  font: 12px var(--font-sans);
+  background: var(--ax-panel);
+  color: var(--ax-ink);
+  font: 500 13px var(--font-sans);
 }
-.atlas-orbit button { width: 32px; height: 30px; color: var(--ax-ink); font-size: 19px; }
+.spatial-solid { color: var(--node-color); }
+.solid-face { stroke: currentColor; stroke-width: .025; stroke-linejoin: round; }
+.solid-face.tone-0 { fill: color-mix(in srgb,currentColor 46%,white); }
+.solid-face.tone-1 { fill: color-mix(in srgb,currentColor 74%,white); }
+.solid-face.tone-2 { fill: currentColor; }
+.solid-face.tone-3 { fill: color-mix(in srgb,currentColor 76%,black); }
+.spatial-signals { pointer-events: none; fill: var(--ax-accent); stroke: var(--ax-panel); stroke-width: .7px; }
+@media (prefers-reduced-motion: reduce) { .spatial-signals { display: none; } }
+html[data-motion=false] .spatial-signals { display: none; }
+html body .atlas-record:is(.graph-neighbor,:focus-visible,.selected) .depth-glyph { opacity: 1; }
+.graph-layouts { flex-wrap: wrap; max-width: 100%; }
+.network-stage:is([data-layout=atlas],[data-layout=spatial]) .knowledge-svg { touch-action: none; }
+html body .network-stage[data-layout=spatial] .node-state-label { display: none; }
+html body .network-stage:is([data-layout=atlas],[data-layout=spatial]) .knowledge-edge[data-source-kind] {
+  --edge-color: var(--node-file);
+  stroke: color-mix(in srgb,var(--edge-color) 78%,var(--ax-ink)) !important;
+  stroke-opacity: var(--link-depth);
+  stroke-width: 1.5px;
+}
+html body .knowledge-edge[data-source-kind=agent] { --edge-color: var(--node-agent) !important; }
+html body .knowledge-edge[data-source-kind=task] { --edge-color: var(--node-task) !important; }
+html body .knowledge-edge[data-source-kind=model] { --edge-color: var(--node-model) !important; }
+html body .network-stage:is([data-layout=atlas],[data-layout=spatial]) .knowledge-svg.has-node-highlight .knowledge-edge.related {
+  stroke: var(--edge-color) !important;
+  stroke-opacity: 1;
+  stroke-width: 2.6px;
+}
 @media (max-width: 760px) {
   html body .graph-layouts button { padding-inline: 9px; }
 }

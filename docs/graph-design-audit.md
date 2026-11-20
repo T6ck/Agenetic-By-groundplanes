@@ -29,7 +29,7 @@ Agenetic's role colors follow the device theme. The Atlas uses distinct marker s
 
 ## Implementation and verification
 
-The browser and Electron renderer load the same graph code. The spatial layout uses a multi-source traversal from agents and high-degree records, groups disconnected components separately, and projects the resulting 3D coordinates into the existing SVG. Dragging the Atlas rotates the coordinates. Zooming transforms the existing world. Flow and Freeform reuse the same workspace records, link index, keyboard targets and inspector.
+The browser and Electron renderer load the same graph code. The spatial layout uses a multi-source traversal from agents and high-degree records, groups disconnected components separately, and projects the resulting 3D coordinates into the existing SVG. Atlas and Spatial project records, faceted type marks and curved links through a perspective camera. Dragging open space pitches and turns the camera. Alt-drag rolls it. Pulling a record displaces its direct neighbors and their neighbors by decreasing amounts. The graph returns to its saved arrangement on release. Zooming transforms the existing world. Flow and Freeform reuse the same workspace records, link index, keyboard targets and inspector.
 
 The regression checks exercise mode changes against the populated Fieldwork workspace, verify real edge counts, follow a wiki reference and return, and reload after rotating and organizing. A separate Chromium test uses 600 linked notes. The layout fixture uses 1,500 records. Those checks establish behavior at their tested sizes. They do not establish parity with the scale depicted in the Mindcorpus walkthrough.
 

@@ -4,7 +4,7 @@ import {readFileSync} from 'node:fs';
 import {runInNewContext} from 'node:vm';
 
 const source=['public/graph-atlas.js','public/graph-investigation.js'].map(p=>readFileSync(p,'utf8')).join('\n');
-const api=runInNewContext(source+'\n({atlasSurfacePaths,downstreamClaims,shortestGraphRoutes,locateReviewedQuote,reviewAnchor,quoteComparison,atlasCloud,investigationSpec})',{document:{addEventListener(){}}});
+const api=runInNewContext(source+'\n({homeOrientation,atlasSurfacePaths,downstreamClaims,shortestGraphRoutes,locateReviewedQuote,reviewAnchor,quoteComparison,atlasCloud,investigationSpec})',{document:{addEventListener(){}}});
 const nodes=ids=>[...ids].map(id=>({id,name:id,kind:'file'}));
 const link=(from,to,kind='reference')=>({from,to,kind});
 const plain=value=>JSON.parse(JSON.stringify(value));
@@ -76,7 +76,7 @@ test('downstream citations include indirect dependents, skip superseded claims a
  assert.ok(!afterCorrection.rows.some(r=>r.record.id==='d')&&afterCorrection.ids.has('d'));
 });
 test('active rotation samples decorative geometry and release restores the full surface at the same angle',()=>{
- const still=api.atlasSurfacePaths(.2),moving=api.atlasSurfacePaths(.2,true);
+ const q=api.homeOrientation(.2),still=api.atlasSurfacePaths(q),moving=api.atlasSurfacePaths(q,true);
  assert.equal(moving.length,still.length);assert.ok(moving.join('').length<still.join('').length*.3);
- assert.equal(api.atlasSurfacePaths(.2,false),still);
+ assert.equal(api.atlasSurfacePaths(q,false),still);
 });

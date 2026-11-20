@@ -2,9 +2,10 @@
 
 // The atlas surface supplies orientation. Only workspace records and saved links
 // participate in selection, counts, search, and traversal.
-const graphLayouts = {atlas:'Atlas',clusters:'Clusters',orbit:'Orbit',flow:'Flow',freeform:'Freeform'};
+const graphLayouts = {atlas:'Atlas',spatial:'Spatial',clusters:'Clusters',orbit:'Orbit',flow:'Flow',freeform:'Freeform'};
 const graphLayoutHelp = {
-  atlas:'Rotate to explore connected regions.',
+  atlas:'Drag the surface to rotate. Pull a record to follow its links.',
+  spatial:'Drag the space to rotate. Pull a record to trace its neighbors.',
   clusters:'Follow links between groups of related records.',
   orbit:'Each ring adds a link from the center. Open a record to recenter.',
   flow:'Read across the columns to follow a workflow.',
@@ -26,17 +27,47 @@ function atlasSurface(u,v) {
   return [-310*c, -174*s*up*seam*fold - 17*c + temporal - 23*c*c,
     132*s*side*fold*(1+.12*c)];
 }
-function atlasProject(point,angle) {
-  const [x,y,z]=point,cos=Math.cos(angle),sin=Math.sin(angle);
-  const depth=z*cos-x*sin;
-  return [x*cos+z*sin,y*.975-depth*.22,depth];
+function spatialLayout(layout) {
+  return layout==='atlas'||layout==='spatial';
+}
+// Unit quaternions keep rotations continuous through both poles. Compose each
+// gesture about the viewer's axes so dragging right always turns toward the right.
+function axisRotation(x,y,z,angle) {
+  const factor=Math.sin(angle/2)/(Math.hypot(x,y,z)||1);
+  return [x*factor,y*factor,z*factor,Math.cos(angle/2)];
+}
+function composeRotation([a,b,c,d],[x,y,z,w]) {
+  const q=[d*x+a*w+b*z-c*y,d*y-a*z+b*w+c*x,d*z+a*y-b*x+c*w,d*w-a*x-b*y-c*z];
+  const length=Math.hypot(...q);
+  return q.map(v=>v/length);
+}
+function homeOrientation(yaw=atlasHomeAngle) {
+  return composeRotation(axisRotation(1,0,0,.22),axisRotation(0,1,0,yaw));
+}
+function savedOrientation(space,layout) {
+  const q=space[layout+'Orientation'];
+  if(Array.isArray(q)&&q.length===4&&q.every(Number.isFinite)){
+    const norm=Math.hypot(...q);
+    if(Number.isFinite(norm)&&norm>.0001)return q.map(v=>v/norm);
+  }
+  return homeOrientation(layout==='atlas'&&Number.isFinite(space.atlasAngle)?space.atlasAngle:atlasHomeAngle);
+}
+function viewMatrix([x,y,z,w]) {
+  return [1-2*(y*y+z*z),2*(x*y-z*w),2*(x*z+y*w),
+    2*(x*y+z*w),1-2*(x*x+z*z),2*(y*z-x*w),
+    2*(x*z-y*w),2*(y*z+x*w),1-2*(x*x+y*y)];
+}
+const graphLens=950;
+function projectPoint([x,y,z],m) {
+  const depth=m[6]*x+m[7]*y+m[8]*z,scale=graphLens/(graphLens-depth);
+  return [(m[0]*x+m[1]*y+m[2]*z)*scale,(m[3]*x+m[4]*y+m[5]*z)*scale,depth,scale];
 }
 // Geometry is generated once. Each pass batches many fibers in one SVG path.
 let atlasFibers,orbitFibers;
 const previousSurface=new Map();
-function atlasSurfacePaths(angle,duringOrbit=false) {
+function atlasSurfacePaths(orientation,duringOrbit=false) {
   const cached=previousSurface.get(duringOrbit);
-  if(cached?.angle===angle)return cached.paths;
+  if(cached?.orientation===orientation)return cached.paths;
   if (!atlasFibers) {
     atlasFibers=[];
     for(let band=0;band<88;band++) {
@@ -81,11 +112,12 @@ function atlasSurfacePaths(angle,duringOrbit=false) {
   if(duringOrbit&&!orbitFibers){
     orbitFibers=atlasFibers.filter((_,i)=>i%3===0).map(curve=>curve.filter((_,i)=>i%3===0||i===curve.length-1));
   }
+  const matrix=viewMatrix(orientation);
   const bands=Array.from({length:8},()=>[]);
   for(const curve of duringOrbit?orbitFibers:atlasFibers){
     let last=-1,previous='';
     for(const p of curve){
-      const [x,y,z]=atlasProject(p,angle);
+      const [x,y,z]=projectPoint(p,matrix);
       const region=p[1]>103?3:p[0]<-100?0:p[0]>95?2:1;
       const band=region+(z>0?4:0);
       const coord=x.toFixed(1)+' '+y.toFixed(1);
@@ -94,7 +126,7 @@ function atlasSurfacePaths(angle,duringOrbit=false) {
     }
   }
   const paths=bands.map(b=>b.join(''));
-  previousSurface.set(duringOrbit,{angle,paths});return paths;
+  previousSurface.set(duringOrbit,{orientation,paths});return paths;
 }
 function atlasCloud(nodes,links) {
   const adjacent=new Map(nodes.map(n=>[n.id,new Set()]));
@@ -244,8 +276,110 @@ function layoutGuides(nodes){
     return '<g class="district-'+i%4+'"><circle cx="'+g.x+'" cy="'+g.y+'" r="'+g.radius+'"/><text text-anchor="middle" x="'+g.x+'" y="'+(g.y-g.radius-9)+'">'+esc(g.name.length>26?g.name.slice(0,25)+'…':g.name)+'</text></g>';
   }).join('')+'</g>';
 }
-function projectedAtlasPositions(cloud,angle) {
-  return new Map(Array.from(cloud,([id,point])=>[id,atlasProject(point,angle).slice(0,2)]));
+// Spread each connected region around its hub. In contrast to the Atlas shell,
+// each record here can sit inside the volume. Equal-area directions avoid poles.
+function spatialCloud(regions) {
+  const points=new Map(),golden=Math.PI*(3-Math.sqrt(5));
+  const sphere=(i,count)=>{
+    const y=1-2*(i+.5)/count,r=Math.sqrt(1-y*y),a=i*golden;
+    return [Math.cos(a)*r,y,Math.sin(a)*r];
+  };
+  regions.forEach((region,i)=>{
+    const total=regions.length;
+    const direction=sphere(i,total);
+    const center=direction.map((v,k)=>total===1?0:v*[212,142,170][k]);
+    const hub=region.id.startsWith('hub:')?region.id.slice(4):null;
+    const members=region.ids.filter(id=>id!==hub);
+    if(hub)points.set(hub,center);
+    members.forEach((id,j)=>{
+      const dir=sphere(j,members.length);
+      const radius=(total===1?185:62+Math.min(44,5*Math.sqrt(members.length)))*(.73+.27*((j*.618)%1));
+      points.set(id,dir.map((v,k)=>center[k]+v*radius*(k===0?1.24:1)));
+    });
+  });
+  return points;
+}
+function updateProjection(ids) {
+  if(!ids){
+    network.matrix=viewMatrix(network.orientation);
+    network.positions=new Map();network.depths=new Map();network.worldPoints=new Map();
+  }
+  for(const id of ids||network.cloud.keys()){
+    let point=network.cloud.get(id);
+    const weight=network.pull?.weights.get(id);
+    if(weight)point=point.map((v,k)=>v+weight*network.pull.delta[k]);
+    network.worldPoints.set(id,point);
+    const [x,y,depth,scale]=projectPoint(point,network.matrix);
+    network.positions.set(id,[x,y]);network.depths.set(id,{depth,scale});
+  }
+}
+function linkMidpoint(a,b) {
+  const mid=a.map((v,k)=>(v+b[k])/2);
+  const lift=Math.min(42,Math.hypot(a[0]-b[0],a[1]-b[1],a[2]-b[2])*.13);
+  const length=Math.max(1,Math.hypot(...mid));
+  return mid.map(v=>v+v/length*lift);
+}
+// Project a point on the world-space curve along with its ends so a link can
+// turn edge-on. Keeping SVG coordinates short reduces work on dense graphs.
+function spatialLinkPath(source,target,midpoint) {
+  const pa=network.positions.get(source),pb=network.positions.get(target);
+  const start='M'+pa[0].toFixed(2)+' '+pa[1].toFixed(2),end=pb[0].toFixed(2)+' '+pb[1].toFixed(2);
+  if(source===target){
+    const a=network.worldPoints.get(source);
+    const c=projectPoint([a[0]-25,a[1]-35,a[2]+12],network.matrix);
+    const d=projectPoint([a[0]+25,a[1]-35,a[2]-12],network.matrix);
+    return start+'C'+c[0]+' '+c[1]+' '+d[0]+' '+d[1]+' '+end;
+  }
+  if(!midpoint)midpoint=linkMidpoint(network.worldPoints.get(source),network.worldPoints.get(target));
+  const [x,y]=projectPoint(midpoint,network.matrix);
+  return start+'Q'+(2*x-(pa[0]+pb[0])/2).toFixed(2)+' '+(2*y-(pa[1]+pb[1])/2).toFixed(2)+' '+end;
+}
+function spatialEdgeInk(source,target){
+  const a=network.depths.get(source).depth,b=network.depths.get(target).depth;
+  return Math.min(1,Math.max(.3,.73+(a+b)/950)).toFixed(2);
+}
+function glyphDepthInk(depth){
+  return Math.max(.42,Math.min(1,.78+depth/540)).toFixed(2);
+}
+// Four shared meshes keep the type marks dimensional without multiplying the
+// number of SVG faces by the size of the workspace.
+function prismMesh(sides) {
+  const vertices=[];
+  for(const z of [-.65,.65])for(let i=0;i<sides;i++){
+    const a=2*Math.PI*(i+.5)/sides;
+    vertices.push([Math.cos(a),Math.sin(a),z]);
+  }
+  const ring=Array.from({length:sides},(_,i)=>i);
+  return {vertices,faces:[ring,ring.map(i=>i+sides),...ring.map(i=>{
+    const j=(i+1)%sides;return [i,j,j+sides,i+sides];
+  })]};
+}
+const spatialMeshes={
+  file:{vertices:[[1,0,0],[0,1,0],[-1,0,0],[0,-1,0],[0,0,1],[0,0,-1]],
+    faces:[[0,1,4],[1,2,4],[2,3,4],[3,0,4],[0,1,5],[1,2,5],[2,3,5],[3,0,5]]},
+  agent:prismMesh(4),
+  task:{vertices:[[0,-1.12,-.5],[-1,.74,-.5],[1,.74,-.5],[0,.12,1.1]],faces:[[0,1,2],[0,1,3],[1,2,3],[2,0,3]]},
+  model:prismMesh(6)
+};
+function solidFaces(mesh,matrix) {
+  const vertices=mesh.vertices.map(([x,y,z])=>[
+    matrix[0]*x+matrix[1]*y+matrix[2]*z,matrix[3]*x+matrix[4]*y+matrix[5]*z,matrix[6]*x+matrix[7]*y+matrix[8]*z]);
+  const shades=['','','',''];
+  for(const indices of mesh.faces){
+    const points=indices.map(i=>vertices[i]),[a,b,c]=points;
+    const u=b.map((v,i)=>v-a[i]),v=c.map((n,i)=>n-a[i]);
+    let nx=u[1]*v[2]-u[2]*v[1],ny=u[2]*v[0]-u[0]*v[2],nz=u[0]*v[1]-u[1]*v[0];
+    if(nx*a[0]+ny*a[1]+nz*a[2]<0){nx=-nx;ny=-ny;nz=-nz;}
+    if(nz<=0)continue;
+    const light=(-.49*nx-.65*ny+.58*nz)/Math.hypot(nx,ny,nz);
+    const tone=light>.72?0:light>.28?1:light>-.15?2:3;
+    shades[tone]+='M'+points.map(p=>p[0].toFixed(3)+' '+p[1].toFixed(3)).join('L')+'Z';
+  }
+  return shades;
+}
+function spatialDefinitions(){
+  return '<defs>'+Object.entries(spatialMeshes).map(([kind,mesh])=>'<g id="solid-'+kind+'">'+
+    solidFaces(mesh,network.matrix).map((d,i)=>'<path class="solid-face tone-'+i+'" d="'+d+'"/>').join('')+'</g>').join('')+'</defs>';
 }
 function graphViewUnderlay(nodes) {
   if(!nodes.length)return '';
@@ -255,9 +389,10 @@ function graphViewUnderlay(nodes) {
     return '<g class="flow-columns" aria-hidden="true">'+network.flowColumns.filter(c=>visible.has(c.kind)).map(c=>
       '<text x="'+c.x+'" y="'+c.y+'">'+esc(c.label)+'</text>').join('')+'</g>';
   }
+  if(network.layout==='spatial')return spatialDefinitions();
   if(network.layout!=='atlas')return '';
-  const paths=atlasSurfacePaths(network.angle);
-  return '<g class="atlas-surface" aria-hidden="true">'+paths.map((d,i)=>
+  const paths=atlasSurfacePaths(network.orientation);
+  return spatialDefinitions()+'<g class="atlas-surface" aria-hidden="true">'+paths.map((d,i)=>
     '<g class="zone-'+(i%4)+(i<4?' far':' near')+'"><path id="atlas-fiber-'+i+'" class="atlas-fiber" d="'+d+'"/>'+
     '<use href="#atlas-fiber-'+i+'" class="atlas-grain"/></g>').join('')+'</g>';
 }
@@ -275,30 +410,86 @@ function graphLinkMarkup(link) {
   const a=network.positions.get(link.from),b=network.positions.get(link.to);
   const attrs='class="knowledge-edge '+esc(link.kind)+'" data-kind="'+esc(link.kind)+'" data-source="'+esc(link.from)+'" data-target="'+esc(link.to)+'" ';
   if(network.layout==='freeform')return '<line '+attrs+'x1="'+a[0]+'" y1="'+a[1]+'" x2="'+b[0]+'" y2="'+b[1]+'"/>';
+  if(spatialLayout(network.layout))return '<path '+attrs+'data-source-kind="'+esc(network.kinds.get(link.from))+'" style="--link-depth:'+spatialEdgeInk(link.from,link.to)+'" fill="none" d="'+spatialLinkPath(link.from,link.to)+'"/>';
   return '<path '+attrs+'fill="none" d="'+graphLinkPath(a,b,network.layout)+'"/>';
 }
 function atlasNode(n,links) {
   const [x,y]=network.positions.get(n.id),degree=degreeFor(n.id,links);
-  const radius=(4.3+Math.min(6,Math.sqrt(degree)*1.4))*network.nodeScale;
+  const spatial=spatialLayout(network.layout);
+  const radius=(4.3+Math.min(6,Math.sqrt(degree)*1.4))*network.nodeScale*(spatial?1.22:1);
   const shape={file:'M0 -1 1 0 0 1 -1 0Z',agent:'M-.85 -.85H.85V.85H-.85Z',task:'M0 -1 1 .8H-1Z',model:'M-.5 -.9H.5L1 0 .5 .9H-.5L-1 0Z'};
   const name=n.name.replace(/\.md$/i,''),label=objectLabel(n);
-  const landmark=network.layout!=='atlas'||network.landmarks.has(n.id);
+  const landmark=!spatialLayout(network.layout)||network.landmarks.has(n.id);
+  const scale=spatial?network.depths.get(n.id).scale:1;
   return '<g class="knowledge-node signal-node atlas-record '+n.kind+' subtype-'+nodeState(n)+(landmark?' landmark':'')+(network.layout==='orbit'&&network.orbit.root===n.id?' orbit-center':'')+
     (studio.selected.has(n.id)?' selected':'')+'" data-knowledge-node="'+esc(n.id)+'" transform="translate('+x+' '+y+')" tabindex="-1" role="button" aria-label="Open '+esc(n.name)+' · '+esc(label)+'">'+
     '<title>'+esc(n.name)+' · '+esc(label)+' · '+degree+' connections</title><circle class="node-hit" r="'+Math.max(15,radius+7)+'"/>'+
-    '<circle class="orb-body geometry-measure" r="'+radius+'"/><circle class="atlas-halo" r="'+(radius+5)+'"/>'+
-    '<path class="atlas-mark" d="'+shape[n.kind]+'" transform="scale('+radius+')"/><line class="node-tether"/>'+
+    '<g class="depth-glyph" transform="scale('+scale+')" opacity="'+(spatial?glyphDepthInk(network.depths.get(n.id).depth):1)+'"><circle class="orb-body geometry-measure" r="'+radius+'"/><circle class="atlas-halo" r="'+(radius+5)+'"/>'+
+    (spatial?'<use class="spatial-solid" href="#solid-'+n.kind+'" transform="scale('+radius+')"/>':'<path class="atlas-mark" d="'+shape[n.kind]+'" transform="scale('+radius+')"/>')+'</g><line class="node-tether"/>'+
     '<text x="12" y="4">'+esc(name.length>40?name.slice(0,37)+'…':name)+'<tspan class="node-state-label" x="12" dy="15">'+esc(label)+'</tspan></text></g>';
 }
-function rotateGraphAtlas(angle,svg,duringOrbit=false) {
-  network.angle=angle%(2*Math.PI);
-  network.positions=projectedAtlasPositions(network.cloud,network.angle);
-  const paths=svg.querySelectorAll('.atlas-fiber');
-  if(paths.length)atlasSurfacePaths(network.angle,duringOrbit).forEach((d,i)=>paths[i].setAttribute('d',d));
+function paintSpatialGraph(svg,duringGesture=false) {
   const graph=indexedGraph(svg);
-  for(const [id,el] of graph.nodes)el.setAttribute('transform','translate('+network.positions.get(id).join(' ')+')');
-  paintInvestigationTerritory(svg);
-  for(const p of svg.querySelectorAll('.knowledge-edge')){
-    p.setAttribute('d',graphLinkPath(network.positions.get(p.dataset.source),network.positions.get(p.dataset.target),'atlas'));
+  const affected=graph.orientation===network.orientation&&(network.pull?.weights||graph.pulled);
+  updateProjection(affected?affected.keys():null);
+  const rotating=duringGesture&&!network.pull;
+  if(!graph.glyphs){
+    graph.glyphs=new Map(Array.from(graph.nodes,([id,el])=>[id,{el,mark:el.querySelector('.depth-glyph')}]));
+    graph.fibers=svg.querySelectorAll('.atlas-fiber');
+    graph.solids=Object.entries(spatialMeshes).map(([kind,mesh])=>({mesh,faces:svg.querySelectorAll('#solid-'+kind+' path')}));
+    graph.curves=new Map(graph.links.map(el=>{
+      const {source,target}=el.dataset;
+      return [el,{source,target,mid:linkMidpoint(network.cloud.get(source),network.cloud.get(target))}];
+    }));
   }
+  if(graph.orientation!==network.orientation){
+    for(const {mesh,faces} of graph.solids)solidFaces(mesh,network.matrix).forEach((d,i)=>faces[i]?.setAttribute('d',d));
+  }
+  if(graph.fibers.length&&(graph.orientation!==network.orientation||graph.rotating!==rotating)){
+    atlasSurfacePaths(network.orientation,rotating).forEach((d,i)=>graph.fibers[i].setAttribute('d',d));
+  }
+  for(const id of affected?affected.keys():graph.nodes.keys()){
+    const glyph=graph.glyphs.get(id);
+    if(!glyph)continue;
+    const [x,y]=network.positions.get(id);
+    glyph.el.setAttribute('transform','translate('+x.toFixed(3)+' '+y.toFixed(3)+')');
+    const {depth,scale}=network.depths.get(id);
+    const size=duringGesture?Math.round(scale*48)/48:scale,ink=glyphDepthInk(depth);
+    if(size!==glyph.size){glyph.mark.setAttribute('transform','scale('+size.toFixed(3)+')');glyph.size=size;}
+    if(ink!==glyph.ink){glyph.mark.setAttribute('opacity',ink);glyph.ink=ink;}
+  }
+  const edges=affected?new Set(Array.from(affected.keys()).flatMap(id=>graph.edges.get(id)||[])):graph.links;
+  for(const el of edges){
+    const curve=graph.curves.get(el),{source,target}=curve;
+    el.setAttribute('d',spatialLinkPath(source,target,network.pull?null:curve.mid));
+    const ink=spatialEdgeInk(source,target);
+    if(ink!==curve.ink){el.style.setProperty('--link-depth',ink);curve.ink=ink;}
+  }
+  if(!affected&&(!duringGesture||graph.nodes.size<150))orderSpatialNodes(svg);
+  graph.orientation=network.orientation;graph.pulled=network.pull?.weights;graph.rotating=rotating;
+  paintInvestigationTerritory(svg);
+}
+let spatialTraceId=0;
+function traceSpatialLinks(svg,edges){
+  const layer=svg.querySelector('.spatial-signals');
+  if(!layer)return;
+  layer.replaceChildren();
+  if(appearance().motion===false||matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+  // Follow the actual SVG path, including its updates during a gesture.
+  layer.innerHTML=edges.slice(0,4).map((edge,i)=>{
+    if(!edge.id)edge.id='spatial-trace-'+(++spatialTraceId);
+    return '<circle r="2.7"><animateMotion dur="3.4s" begin="-'+(i*.8)+'s" repeatCount="indefinite"><mpath href="#'+edge.id+'"/></animateMotion></circle>';
+  }).join('');
+}
+function orderSpatialNodes(svg){
+  // Reorder from back to front while keeping a keyboard-focused record attached.
+  const graph=indexedGraph(svg),layer=svg.querySelector('.network-nodes'),focused=document.activeElement;
+  const sorted=Array.from(layer.children).sort((a,b)=>network.depths.get(a.dataset.knowledgeNode).depth-network.depths.get(b.dataset.knowledgeNode).depth);
+  let next=null;
+  for(let i=sorted.length-1;i>=0;i--){
+    const node=sorted[i];
+    if(node!==focused&&node.nextElementSibling!==next)layer.insertBefore(node,next);
+    next=node;
+  }
+  graph.first=layer.firstElementChild;
 }

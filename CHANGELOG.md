@@ -4,7 +4,8 @@ For installers, checksums, and notes by build, see [GitHub Releases](https://git
 
 ## 0.2.17
 
-- Choose Atlas, Clusters, Orbit, Flow, or Freeform. Each layout remembers its camera. Orbit can center on any record. Clusters show which records share a region.
+- Atlas and the new Spatial view support pitch, yaw, and roll. Turn over a cluster to see its far side or pull a record to follow its neighbors. Record faces and link curves turn in depth, and each spatial view remembers its own angle.
+- Choose Atlas, Spatial, Clusters, Orbit, Flow, or Freeform. Each layout remembers its camera. Orbit can center on any record. Clusters show which records share a region.
 - Trace paths, inspect the reviewed passage beside the current source, find claims affected by an edit, and save an investigation to reopen later.
 - On the Atlas, rotation draws lighter contours during a drag. The reader can follow named wiki references and return to the previous record.
 

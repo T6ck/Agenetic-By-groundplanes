@@ -24,7 +24,7 @@ Agenetic is free for personal use. Commercial use requires a license from Ground
 
 ## Graph layouts
 
-Open **Graph** and choose the layout that fits your question. Atlas groups connected records on a rotatable surface. Clusters separates those groups so you can see the links between them. Orbit counts links from a record you choose. Flow separates sources, agents and tasks into columns. Freeform keeps your hand-placed positions. Each workspace remembers its choice.
+Open **Graph** and choose the layout that fits your question. Atlas groups connected records on a contoured surface. Spatial places the same records around their hubs in open 3D space. In either view, drag the background to rotate, drag a record to pull its neighbors, or choose **View angle** to tilt, roll, or reset. Shift-drag pans and the wheel zooms. Clusters separates those groups so you can see the links between them. Orbit counts links from a record you choose. Flow separates sources, agents and tasks into columns. Freeform keeps your hand-placed positions. Each workspace remembers its choice.
 
 **Investigate** traces paths and checks the passages behind a claim. Open a source and select **Check source impact** to find the claims that depend on it. Save an investigation to run the same question again after editing a source.
 
@@ -37,6 +37,14 @@ Open **Graph** and choose the layout that fits your question. Atlas groups conne
 | [![A paused research project with queued tasks](docs/screenshots/gallery/research.webp)](docs/screenshots/gallery/research.webp) | [![Selected interview passages](docs/screenshots/gallery/sources.webp)](docs/screenshots/gallery/sources.webp) | [![The reviewed passage beside the current source](docs/screenshots/gallery/review.webp)](docs/screenshots/gallery/review.webp) |
 
 The screenshots use the Fieldwork demo in Porcelain. [View Atlas in Graphite](docs/screenshots/gallery/atlas-graphite.webp).
+
+### Turning and pulling the graph
+
+| Atlas at rest | Pitched vertically | Rolled sideways |
+| --- | --- | --- |
+| [![Atlas before turning](docs/screenshots/gallery/atlas.webp)](docs/screenshots/gallery/atlas.webp) | [![Atlas after a vertical drag](docs/screenshots/gallery/atlas-tilt.webp)](docs/screenshots/gallery/atlas-tilt.webp) | [![Atlas after rolling](docs/screenshots/gallery/atlas-roll.webp)](docs/screenshots/gallery/atlas-roll.webp) |
+| **Spatial at rest** | **Same records after tilting and turning** | **Pulling a linked record** |
+| [![Spatial view in Porcelain](docs/screenshots/gallery/spatial-home.webp)](docs/screenshots/gallery/spatial-home.webp) | [![Spatial after turning the camera](docs/screenshots/gallery/spatial-turned.webp)](docs/screenshots/gallery/spatial-turned.webp) | [![A record and its neighbors during a pull](docs/screenshots/gallery/spatial-pull.webp)](docs/screenshots/gallery/spatial-pull.webp) |
 
 ## Project links
 

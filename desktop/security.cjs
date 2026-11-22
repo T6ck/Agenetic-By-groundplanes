@@ -5,7 +5,7 @@ function externalURL(value){
   const url=new URL(value);
   if (url.protocol!=='https:'||url.username||url.password||url.port) return null;
   if (url.hostname==='github.com') {
-   return /^\/T6ck\/Agenetic-By-groundplanes\/(releases|issues)(?:\/|$)/i.test(url.pathname)?url.href:null;
+   return /^\/T6ck\/(?:AgeneticByGroundplanes|Agenetic-By-groundplanes)\/(releases|issues)(?:\/|$)/i.test(url.pathname)?url.href:null;
   }
   return ['groundplanes.com','neuron-ops.enchantingflora5.chatgpt.site','huggingface.co','buy.stripe.com','donate.stripe.com','billing.stripe.com','checkout.stripe.com','invoice.stripe.com','pay.stripe.com','water.org'].includes(url.hostname)?url.href:null;
  } catch {return null;}

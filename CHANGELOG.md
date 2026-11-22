@@ -1,6 +1,6 @@
 # Changelog
 
-For installers, checksums, and notes by build, see [GitHub Releases](https://github.com/T6ck/Agenetic-By-groundplanes/releases).
+For installers, checksums, and notes by build, see [GitHub Releases](https://github.com/T6ck/AgeneticByGroundplanes/releases).
 
 ## 0.2.17
 

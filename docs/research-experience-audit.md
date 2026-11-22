@@ -182,7 +182,7 @@ Before calling the redesign ready: test keyboard-only use, focus return after di
 
 ## Observed validation results
 
-Commit `75ec796b01bb587571a181a4e678efd89266d9c1` passed [GitHub Actions run 44068406022](https://github.com/T6ck/Agenetic-By-groundplanes/actions/runs/44068406022): 65 unit tests and 14 Chromium interaction checks. The model boundary was mocked. No real inference or Windows update claim follows from these results.
+Commit `75ec796b01bb587571a181a4e678efd89266d9c1` passed [GitHub Actions run 44068406022](https://github.com/T6ck/AgeneticByGroundplanes/actions/runs/44068406022): 65 unit tests and 14 Chromium interaction checks. The model boundary was mocked. No real inference or Windows update claim follows from these results.
 
 Manual inspection of the generated 1440-pixel Porcelain screenshot shows a consistent light surface and readable node labels, but the lower explorer has too many competing destinations and the central graph remains crowded. The 390-pixel screenshot shows header overflow and an explorer occupying most of the graph. The narrow-screen test proves destination reachability only; it does not prove responsive layout quality. These are open design defects. Add explicit overflow and usable-canvas assertions before treating mobile layout as supported.
 

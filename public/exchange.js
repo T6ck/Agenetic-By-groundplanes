@@ -18,8 +18,8 @@ function installedAdditions(){modal('Installed additions','<button data-mcp-open
 function desktopStatus(){
  modal('Agenetic releases','<section class="desktop-status"><p>The Windows x64 beta includes the app and local CPU runtime.</p>'+
   (window.ageneticDesktop?'<p id="installed-release">'+esc(desktopRelease?'Version '+desktopRelease.version+' · '+desktopRelease.channel:'Reading installed version…')+'</p>':'')+
-  '<div class="actions"><a href="https://github.com/T6ck/Agenetic-By-groundplanes/releases" target="_blank" rel="noopener noreferrer">Downloads and release notes</a>'+
-  '<a href="https://github.com/T6ck/Agenetic-By-groundplanes/issues/new/choose" target="_blank" rel="noopener noreferrer">Report a beta issue</a>'+
+  '<div class="actions"><a href="https://github.com/T6ck/AgeneticByGroundplanes/releases" target="_blank" rel="noopener noreferrer">Downloads and release notes</a>'+
+  '<a href="https://github.com/T6ck/AgeneticByGroundplanes/issues/new/choose" target="_blank" rel="noopener noreferrer">Report a beta issue</a>'+
   (window.ageneticDesktop?'<button type="button" data-desktop-update>Check for updates</button>'+(window.ageneticDesktop.installUpdate?'<button type="button" data-desktop-install hidden>Quit and install update</button>':''):'')+
   '</div>'+(window.ageneticDesktop?'<p id="release-status" role="status"></p>':'')+'<p>Signed builds download updates and install when you close Agenetic. Unsigned previews use the installer from Releases.</p>'+
   '<p>Need help? Email hello@groundplanes.com.</p></section>');

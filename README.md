@@ -1,19 +1,19 @@
 # Agenetic by Groundplanes
 
 <p>
-<a href="https://github.com/T6ck/Agenetic-By-groundplanes/releases"><img alt="Latest beta" src="https://img.shields.io/github/v/release/T6ck/Agenetic-By-groundplanes?include_prereleases&label=beta&color=4a6fa5"></a>
-<a href="https://github.com/T6ck/Agenetic-By-groundplanes/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/T6ck/Agenetic-By-groundplanes/total?color=4a6fa5"></a>
+<a href="https://github.com/T6ck/AgeneticByGroundplanes/releases"><img alt="Latest beta" src="https://img.shields.io/github/v/release/T6ck/AgeneticByGroundplanes?include_prereleases&label=beta&color=4a6fa5"></a>
+<a href="https://github.com/T6ck/AgeneticByGroundplanes/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/T6ck/AgeneticByGroundplanes/total?color=4a6fa5"></a>
 <img alt="Windows x64" src="https://img.shields.io/badge/Windows-x64-2b2f36?logo=windows&logoColor=white">
 <img alt="Runs locally" src="https://img.shields.io/badge/inference-local-2b2f36">
 <img alt="Free for personal use" src="https://img.shields.io/badge/personal_use-free-3c7a5a">
-<a href="https://github.com/T6ck/Agenetic-By-groundplanes/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/T6ck/Agenetic-By-groundplanes?style=flat&color=b08d3c"></a>
-<a href="https://github.com/T6ck/Agenetic-By-groundplanes/commits/main"><img alt="Last commit" src="https://img.shields.io/github/last-commit/T6ck/Agenetic-By-groundplanes?color=2b2f36"></a>
+<a href="https://github.com/T6ck/AgeneticByGroundplanes/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/T6ck/AgeneticByGroundplanes?style=flat&color=b08d3c"></a>
+<a href="https://github.com/T6ck/AgeneticByGroundplanes/commits/main"><img alt="Last commit" src="https://img.shields.io/github/last-commit/T6ck/AgeneticByGroundplanes?color=2b2f36"></a>
 <a href="https://groundplanes.com"><img alt="Website" src="https://img.shields.io/badge/groundplanes.com-site-2b2f36"></a>
 </p>
 
 A local research workspace for connecting source documents, notes, and model runs. Open a workspace in Graph or Canvas, attach sources to an agent, then review the resulting excerpts, drafts, and claims alongside their sources.
 
-**Windows x64 beta** · [Download from Releases](https://github.com/T6ck/Agenetic-By-groundplanes/releases) · [Changelog](CHANGELOG.md) · [Report a bug](https://github.com/T6ck/Agenetic-By-groundplanes/issues/new/choose)
+**Windows x64 beta** · [Download from Releases](https://github.com/T6ck/AgeneticByGroundplanes/releases) · [Changelog](CHANGELOG.md) · [Report a bug](https://github.com/T6ck/AgeneticByGroundplanes/issues/new/choose)
 
 ## Install
 

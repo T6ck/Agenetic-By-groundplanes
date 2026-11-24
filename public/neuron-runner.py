@@ -10,7 +10,7 @@ import tempfile
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-ORIGIN = "https://neuron-ops.enchantingflora5.chatgpt.site"
+ORIGIN = "https://groundplanes.com"
 HOST = "127.0.0.1"
 PORT = 7871
 MAX_BODY = 65536

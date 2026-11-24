@@ -5,7 +5,7 @@ import {createClient} from 'npm:@supabase/supabase-js@2.112.4';
 import {PRICES,seatCount,emailAddress,modelSetup,sha256} from './rules.mjs';
 import {validateWorkflow} from './workflow-schema.mjs';
 const db=createClient(Deno.env.get('SUPABASE_URL')!,Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,{auth:{persistSession:false}});
-const allowed=new Set(['https://groundplanes.com','https://www.groundplanes.com','https://neuron-ops.enchantingflora5.chatgpt.site','agenetic://app']);
+const allowed=new Set(['https://groundplanes.com','https://www.groundplanes.com','agenetic://app']);
 const json=(v:unknown,status=200,origin='')=>Response.json(v,{status,headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':origin,'Vary':'Origin','Access-Control-Allow-Headers':'authorization, content-type, apikey','Access-Control-Allow-Methods':'POST, OPTIONS'}});
 const random=()=>Array.from(crypto.getRandomValues(new Uint8Array(32)),x=>x.toString(16).padStart(2,'0')).join('');
 async function command(user:string,action:string,body:any){const r=await db.rpc('agenetic_command',{p_user:user,p_action:action,p_body:body});if(r.error)throw Error(r.error.message);return r.data;}

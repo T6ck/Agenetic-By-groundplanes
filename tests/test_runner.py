@@ -14,7 +14,7 @@ class RunnerBoundary(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.proc.terminate();cls.proc.wait(timeout=5);cls.tmp.cleanup()
-    def request(self,path='/status',method='GET',origin='https://neuron-ops.enchantingflora5.chatgpt.site',key=None,payload=None):
+    def request(self,path='/status',method='GET',origin='https://groundplanes.com',key=None,payload=None):
         headers={'Origin':origin,'Authorization':'Bearer '+(self.key if key is None else key),'Content-Type':'application/json'}
         r=urllib.request.Request('http://127.0.0.1:7871'+path,method=method,headers=headers,data=None if payload is None else json.dumps(payload).encode())
         try:

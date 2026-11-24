@@ -1,24 +1,22 @@
-# Research tab
+# Working on a research project
 
-The Research tab keeps a local queue and update journal for the current workspace. Choose a goal, a registered local model, and one to four readable sources, save setup, then select Start research.
+Open **Research** in the workspace that holds your sources. The project has four sections.
 
-## What runs
+| Section | What to do |
+| --- | --- |
+| Plan | Enter your question, choose a registered local model and up to four readable sources, then save the setup. When you’re ready, select **Start research**. |
+| Sources | Read the passages selected for the next run. Check the coverage message on long documents. The passage search reads up to 2 MiB per source and uses keyword matches. |
+| Review | When a draft arrives, open a claim and check its quoted passage against the source. A source edit can make a previous review stale. |
+| Brief | Compare the proposed text with your working brief. Apply the changes you want to keep. You can restore the previous brief. |
 
-A changed source revision queues a comparison. Each task performs evidence review, critical review, and synthesis sequentially. Every completed pass is saved before the next request. Completed results become linked draft nodes and enter claim review; generated text never becomes approved evidence automatically.
+## Running and resuming
 
-Optional follow-ups branch from the same original sources to a maximum depth of two. Automatic placement preserves existing positions. Optional duplicate handling archives only exact unattended draft duplicates with matching source provenance. Sources and reviewed claims are never automatically deleted. Restore is available in Duplicate recovery.
+A task saves its progress after each of three passes. Keep Agenetic open and the device awake. **Pause** lets the current pass finish. **Stop** also asks the runner to cancel the active request. After a restart, start research again to resume eligible work. If the source has changed, review the new text first.
 
-## Controls and limits
+The queue runs one model request at a time. You can set the source check interval and a daily run limit. New follow-up questions wait for approval. When five drafts are waiting for review, clear the backlog before starting more inference.
 
-- One local request at a time, including competing scheduler ticks.
-- Quick or Balanced request profiles, source checks every 5–60 minutes, and a configurable 1–48 run limit per rolling 24 hours.
-- Up to 20 unfinished tasks per workspace. Finished tasks remain in paginated history. Capacity errors pause scheduling with a visible explanation.
-- Pause saves the current completed pass and schedules no next pass. Stop asks the runner to cancel; cancellation support determines how quickly the active request ends.
-- Source changes during inference block stale output. Resume retains completed passes only while the source revision still matches.
-- Changing workspaces pauses scheduling. Relaunching the app preserves the journal but requires an explicit restart.
+## Finding the evidence again
 
-Agenetic must stay open and the device must stay awake. Desktop windows have background throttling disabled for minimized operation. Browsers can suspend background tabs. There is no closed-app service, unattended internet browsing, external tool execution, or automatic publishing in this feature.
+Open **Investigate** in Graph to trace a path between two records. From a source, **Check source impact** lists the claims that depend on it. A saved investigation reruns against the current workspace when you reopen it.
 
-## Validation
-
-Automated tests exercise queue limits, daily budgets, checkpoint recovery, provenance-aware duplicate recovery, and position preservation. Chromium checks use controlled model responses to test persistence, cross-view execution, concurrent timer ticks, interruption, and mid-run source changes. These do not establish real-model quality, Windows sleep/resume behavior, or an all-day hardware endurance result.
+A whole-vault backup includes original attachments, the project journal, and saved source revisions. Export a workflow when you want to share its setup. Workflow exports leave the project journal and working brief on your device.

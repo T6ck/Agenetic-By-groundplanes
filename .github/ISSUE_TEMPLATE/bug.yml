@@ -9,14 +9,12 @@ body:
     attributes:
       label: Agenetic version and Windows version
       description: Find the app version under Navigate → Releases → Check for updates.
-      placeholder: 0.2.15 on Windows 11 24H2
     validations:
       required: true
   - type: textarea
     id: steps
     attributes:
       label: Steps to reproduce
-      placeholder: In Graph, select a note, edit its title, and press Ctrl+K.
     validations:
       required: true
   - type: textarea

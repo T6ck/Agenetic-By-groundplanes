@@ -4,6 +4,10 @@ on:
     branches: [main]
     paths-ignore:
       - '.github/workflows/verify-azure-signing.yml'
+      - '.github/ISSUE_TEMPLATE/**'
+      - 'docs/**'
+      - '*.md'
+      - '.gitignore'
     tags: ['v*']
   workflow_dispatch:
 concurrency:
@@ -180,8 +184,12 @@ jobs:
           notes=$(mktemp)
           {
             printf '## Changes\n\n'
-            base_version="${VERSION%%-beta.*}"
-            awk -v heading="## $base_version" '$0 == heading {show=1; next} /^## / {show=0} show' CHANGELOG.md
+            changes=$(awk -v heading="## $VERSION" '$0 == heading {show=1; next} /^## / {show=0} show && NF {print}' CHANGELOG.md)
+            if test -n "$changes"; then
+              printf '%s\n' "$changes"
+            else
+              git show -s --format=%s "$COMMIT_SHA"
+            fi
             printf '\n## Install and update\n\n'
             if test "$RELEASE_KIND" = preview; then
               printf 'Download the Windows x64 setup EXE below. This preview is unsigned and updates are installed manually.\n'

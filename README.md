@@ -11,64 +11,36 @@
 <a href="https://groundplanes.com"><img alt="Website" src="https://img.shields.io/badge/groundplanes.com-site-2b2f36"></a>
 </p>
 
-A local research workspace for connecting source documents, notes, and model runs. Open a workspace in Graph or Canvas, attach sources to an agent, then review the resulting excerpts, drafts, and claims alongside their sources.
+Agenetic is a Windows app for working through a research question with your own sources. Put your notes and PDFs in a workspace, connect them in the graph, and open the passage behind a claim. If you use a language model to draft a brief, you can run it on your own machine.
 
-**Windows x64 beta** · [Download from Releases](https://github.com/T6ck/AgeneticByGroundplanes/releases) · [Changelog](CHANGELOG.md) · [Report a bug](https://github.com/T6ck/AgeneticByGroundplanes/issues/new/choose)
+[Download the Windows x64 beta](https://github.com/T6ck/AgeneticByGroundplanes/releases) · [Release notes](CHANGELOG.md) · [Groundplanes](https://groundplanes.com)
 
-## Install
+![The Fieldwork workspace in Agenetic’s Atlas graph](docs/screenshots/gallery/atlas.webp)
 
-1. Open a beta release and download its `Agenetic-Setup-…-x64.exe` from **Assets**.
-2. Run Setup and follow the in-app onboarding. Start with the example workspace or create your own.
-3. Open **Models** to register a local GGUF or find one on Hugging Face. The Windows installer includes a CPU runner. Model weights are a separate download.
+## Getting started
 
-If you installed an unsigned preview, run the signed Windows installer once to join the beta update channel.
+1. Download the Windows x64 setup EXE from the release assets and run it.
+2. Open the Fieldwork example to try the graph, or create a workspace and import a source.
+3. Open **Models** if you want to run a local model. The installer includes the llama.cpp CPU runner. Choose a GGUF file you already have or download one from Hugging Face.
 
-Agenetic checks GitHub at startup and hourly, downloads updates in the background, and installs them when you close the app. Open **Navigate → Releases → Check for updates** to see your version and update status.
+Open **Navigate → Releases → Check for updates** to see your installed version. Signed betas download updates in the background and apply them when you close Agenetic. If you have an older unsigned preview, install a signed beta once to switch channels.
 
-## Working in Agenetic
+## Turning and pulling the graph
 
-- Import notes and PDFs, link sources in Graph, and arrange steps in Canvas.
-- Run evidence-only searches over connected sources or draft with a local model. Review drafts and claims against the original material.
-- Export workflows or back up the local vault. Community posting is optional. Release checks, model downloads, community activity, and remote MCP tools use the network when applicable.
+In **Atlas** and **Spatial**, drag the background to rotate the graph. Drag a record to pull its neighbors, then release it to let them settle. Shift-drag pans, the wheel zooms, and **View angle** lets you tilt, roll, or reset.
 
-Agenetic is free for personal use. Commercial use requires a license from Groundplanes.
+**Clusters** groups related records. **Orbit** shows how many links separate each record from a starting point. **Flow** lays out sources, agents, models, and tasks in columns. **Freeform** keeps records where you put them.
 
-If Agenetic is useful to you, a ⭐ on this repo helps other people find it.
+[See all six layouts and the research screens](docs/screenshots/README.md) · [Work through a research project](docs/research-desk.md)
 
-## Graph layouts
+## Community
 
-Open **Graph** and choose the layout that fits your question. Atlas groups connected records on a contoured surface. Spatial places the same records around their hubs in open 3D space. In either view, drag the background to rotate, drag a record to pull its neighbors, or choose **View angle** to tilt, roll, or reset. Shift-drag pans and the wheel zooms. Clusters separates those groups so you can see the links between them. Orbit counts links from a record you choose. Flow separates sources, agents and tasks into columns. Freeform keeps your hand-placed positions. Each workspace remembers its choice.
+Browse posts from the Community tab. To publish, sign in with the code sent to your email and return to Agenetic when your browser asks. [Community API](docs/community-api.md).
 
-**Investigate** traces paths and checks the passages behind a claim. Open a source and select **Check source impact** to find the claims that depend on it. Save an investigation to run the same question again after editing a source.
+## Data and licensing
 
-| Atlas | Clusters | Orbit |
-| --- | --- | --- |
-| [![Connected regions in Atlas](docs/screenshots/gallery/atlas.webp)](docs/screenshots/gallery/atlas.webp) | [![Related records grouped into named clusters](docs/screenshots/gallery/clusters.webp)](docs/screenshots/gallery/clusters.webp) | [![Records arranged by link distance from a center](docs/screenshots/gallery/orbit.webp)](docs/screenshots/gallery/orbit.webp) |
-| **Flow** | **Freeform** | **Trace a path** |
-| [![Sources, agents and tasks arranged into columns](docs/screenshots/gallery/flow.webp)](docs/screenshots/gallery/flow.webp) | [![Hand-placeable records in Freeform](docs/screenshots/gallery/freeform.webp)](docs/screenshots/gallery/freeform.webp) | [![A two-link path from a project brief to a task](docs/screenshots/gallery/paths.webp)](docs/screenshots/gallery/paths.webp) |
-| **Research plan** | **Source passages** | **Review a quotation** |
-| [![A paused research project with queued tasks](docs/screenshots/gallery/research.webp)](docs/screenshots/gallery/research.webp) | [![Selected interview passages](docs/screenshots/gallery/sources.webp)](docs/screenshots/gallery/sources.webp) | [![The reviewed passage beside the current source](docs/screenshots/gallery/review.webp)](docs/screenshots/gallery/review.webp) |
+Workspaces and local model runs stay on your device. Updates, model downloads, community posts, team services, and remote tools use the network. Use a vault backup to keep a copy of your files and research history.
 
-The screenshots use the Fieldwork demo in Porcelain. [View Atlas in Graphite](docs/screenshots/gallery/atlas-graphite.webp).
+Agenetic is free for personal use. Commercial use requires a Groundplanes license. [Contact Groundplanes](mailto:hello@groundplanes.com).
 
-### Turning and pulling the graph
-
-| Atlas at rest | Pitched vertically | Rolled sideways |
-| --- | --- | --- |
-| [![Atlas before turning](docs/screenshots/gallery/atlas.webp)](docs/screenshots/gallery/atlas.webp) | [![Atlas after a vertical drag](docs/screenshots/gallery/atlas-tilt.webp)](docs/screenshots/gallery/atlas-tilt.webp) | [![Atlas after rolling](docs/screenshots/gallery/atlas-roll.webp)](docs/screenshots/gallery/atlas-roll.webp) |
-| **Spatial at rest** | **Same records after tilting and turning** | **Pulling a linked record** |
-| [![Spatial view in Porcelain](docs/screenshots/gallery/spatial-home.webp)](docs/screenshots/gallery/spatial-home.webp) | [![Spatial after turning the camera](docs/screenshots/gallery/spatial-turned.webp)](docs/screenshots/gallery/spatial-turned.webp) | [![A record and its neighbors during a pull](docs/screenshots/gallery/spatial-pull.webp)](docs/screenshots/gallery/spatial-pull.webp) |
-
-## Project links
-
-- [Beta testing and release process](CONTRIBUTING.md)
-- [Private security reporting](SECURITY.md)
-- [Groundplanes](https://groundplanes.com) · [hello@groundplanes.com](mailto:hello@groundplanes.com) · [@GroundplanesCo](https://x.com/GroundplanesCo)
-
-## Research workflow and beta limits
-
-The research project flow connects Plan, Sources, Review and Brief. Inspect selected passages, review claims and approve brief updates. New reviewed evidence retains source revisions so changed material can be checked again.
-
-[Implementation and remaining gates](docs/research-project-implementation.md) · [Graph investigation research](docs/graph-investigations-research.md)
-
-Screenshots show example/test data, not validated findings. Features on main can precede a downloadable release; check its release notes.
+[Build and test](CONTRIBUTING.md) · [Report a bug](https://github.com/T6ck/AgeneticByGroundplanes/issues/new/choose) · [Report a security issue privately](SECURITY.md)

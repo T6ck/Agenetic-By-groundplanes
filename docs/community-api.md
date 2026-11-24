@@ -16,9 +16,7 @@ page redirects to:
 agenetic://auth/callback#access_token=…&refresh_token=…&expires_at=…
 ```
 
-The desktop app should register the `agenetic://` protocol handler for
-`/auth/callback`, read the fragment, and keep the tokens in the OS keychain
-(or `safeStorage`), never in the renderer's localStorage.
+The email code is entered in the browser. Confirm the account in Agenetic to finish signing in.
 
 Sign-out on the web: `https://groundplanes.com/signin?signout=1`. In the app,
 signing out is deleting the stored tokens.
@@ -57,10 +55,10 @@ without it; writes require it.
 | `POST /api/community` | `{action:"resolve", id}`. Moderators only. |
 
 Request and response shapes match what `public/community.js` already sends and
-reads, so the change in the app is the base URL and the bearer header.
+reads, including the post list and pagination cursor.
 
 CORS allows `agenetic://app`, `https://groundplanes.com` and
-`https://www.groundplanes.com`. The renderer CSP needs
+`https://www.groundplanes.com`. The renderer CSP includes
 `connect-src https://groundplanes.com`.
 
 ## Moderators
@@ -69,12 +67,8 @@ Moderator user IDs are listed in `COMMUNITY_MODERATOR_IDS` in the site's
 `wrangler.jsonc` (comma separated). A user's ID is the `user.id` returned by
 `/api/auth/verify`.
 
-## What is left to wire in the app
+## Desktop integration
 
-1. Handle `agenetic://auth/callback` in `desktop/main.cjs` and store the tokens.
-2. Point `public/community.js` and `public/identity.js` at
-   `https://groundplanes.com/api/community` (and `/session`) with the bearer
-   header, refreshing as above.
-3. Add `https://groundplanes.com` to the renderer CSP `connect-src`.
-4. Replace the in-app sign-in link with the browser flow above, or with the
-   direct start/verify calls.
+The installer registers the Agenetic URL scheme. On launch or while the app is running, the main process checks the callback at `agenetic://auth/callback`, verifies the account with the session endpoint, and asks you to confirm its email address. Electron safeStorage encrypts the tokens in the app’s user-data directory.
+
+The desktop renderer uses its local `/api/community` and `/api/session` routes. The main process forwards community requests to Groundplanes, adds the bearer header, and refreshes the session when needed. Signing out removes the local credentials.

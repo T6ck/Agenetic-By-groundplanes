@@ -14,7 +14,7 @@ async function main() {
  }
 
  const config = readFileSync(join('release', 'win-unpacked', 'resources', 'app-update.yml'), 'utf8');
- if (!/^provider: github\s*$/m.test(config) || !/^repo: Agenetic-By-groundplanes\s*$/m.test(config)) {
+ if (!/^provider: github\s*$/m.test(config) || !/^repo: AgeneticByGroundplanes\s*$/m.test(config)) {
   throw new Error('Packaged app is missing its GitHub updater configuration');
  }
  const installer = installers[0];

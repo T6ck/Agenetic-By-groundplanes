@@ -19,12 +19,29 @@ if(desktopBridge){
  function releaseLabel(){return desktopRelease?'Version '+desktopRelease.version+' · '+desktopRelease.channel:'Installed version unavailable';}
  document.addEventListener('click',event=>{const button=event.target.closest('[data-desktop-install]');if(!button)return;(async()=>{if(!await saveEditor())return;const result=await desktopBridge.installUpdate();if(result?.message)toast(result.message)})().catch(report)});
  window.ageneticDesktop.getConnection().then(c=>{if(c.error){desktopConnectionStatus=c.error;if(page==='Models')render();return}companionBase=c.base;token=c.key;desktopConnectionStatus='Companion connected automatically';if(page==='Models')refreshModels().catch(report)}).catch(()=>{desktopConnectionStatus='Companion unavailable. Restart Agenetic to try again.';if(page==='Models')render()});
- renderCommunity=function(){
-  document.body.classList.remove('knowledge-mode');document.body.classList.add('mindspace');applyAppearance();
-  $('#content').innerHTML='<section class="community-shell desktop-community"><header><button data-community-back>'+brandMark()+'<strong>Agenetic</strong><span>/ Community</span></button><div><button data-global-appearance aria-label="Appearance">'+lineIcon('palette')+'Appearance</button></div></header><main class="desktop-community-intro"><span class="section-kicker">A CONNECTION YOU CHOOSE</span><h1>Your work stays here.<br>Ideas can travel.</h1><p>Community opens in your browser with its own sign-in. Your local notes, model files and run history are not uploaded when you open it.</p><p>Export a workflow or theme, review its contents, then choose whether to publish it. Anyone can browse the community. Sign in with your Groundplanes account to publish.</p><div><button class="primary" data-desktop-community>Sign in to the community</button><button data-community-back>Return to workspace</button></div></main></section>';
-  if(appearanceOpen)$('#content').insertAdjacentHTML('beforeend',appearancePanel());
- };
- loadCommunity=async function(){};
+ desktopBridge.onCommunityChanged(async()=>{
+  if(!db||!data)return;
+  try{
+   communityRequest++;
+   Object.assign(community,{posts:[],moderator:false,signedIn:false,nextCursor:null,ready:false});
+   await bootIdentity();
+   if($('#dialog').open && $('#dialog .identity-sheet'))accountDialog();
+   if(page==='Community')await loadCommunity();
+   else{
+    const avatar=document.querySelector('[data-account] .identity-avatar');
+    if(avatar)avatar.innerHTML=identityAvatar();
+   }
+  }catch(error){report(error);}
+ });
+ document.addEventListener('click',event=>{
+  const link=event.target.closest('a[href]');
+  if(!link)return;
+  const url=new URL(link.href);
+  if(url.origin!=='https://groundplanes.com'||url.pathname!=='/signin')return;
+  event.preventDefault();
+  const action=url.searchParams.get('signout')==='1'?desktopBridge.signOutCommunity():desktopBridge.openCommunity();
+  action.catch(report);
+ },true);
  document.addEventListener('click',e=>{if(e.target.closest('[data-desktop-community]'))window.ageneticDesktop.openCommunity();if(e.target.closest('[data-desktop-website]'))window.ageneticDesktop.openWebsite();const update=e.target.closest('[data-desktop-update]');
   if(!update||update.disabled)return;
   const status=document.querySelector('#release-status');

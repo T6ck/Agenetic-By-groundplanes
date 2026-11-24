@@ -488,9 +488,37 @@ try{
   assert.equal(await page.locator('.setup-wizard').count(),0);
   assert.equal(await page.locator('[data-navigate]').evaluate(el=>el===document.activeElement),true);
  });
+ await check('Community loads the native feed and refreshes after browser sign-in and local sign-out',async()=>{
+  const ctx=await browser.newContext();let signed=false;
+  const session=()=>({signedIn:signed,scope:signed?'a'.repeat(64):'guest',moderator:false,
+   signIn:'https://groundplanes.com/signin?app=agenetic',signOut:'https://groundplanes.com/signin?signout=1'});
+  await ctx.addInitScript(()=>{window.ageneticDesktop={
+   getConnection:async()=>({error:'offline'}),
+   onCommunityChanged(fn){window.communityChanged=fn;},
+   async openCommunity(){window.browserOpens=(window.browserOpens||0)+1;},
+   async signOutCommunity(){window.logoutRequested=true;}
+  };});
+  await ctx.route('**/api/session',r=>r.fulfill({json:session()}));
+  await ctx.route('**/api/community?*',r=>r.fulfill({json:{...session(),posts:[],nextCursor:null}}));
+  const fresh=await ctx.newPage();
+  fresh.on('pageerror',error=>errors.push(error.message));
+  try{
+   await fresh.goto(page.url());
+   await fresh.waitForFunction(()=>typeof db!=='undefined'&&db&&typeof data!=='undefined'&&data&&identitySession.verified);
+   await fresh.locator('.setup-wizard').waitFor();
+   await fresh.evaluate(async()=>{closeSetup();page='Community';render();await loadCommunity();});
+   await fresh.getByRole('link',{name:'Sign in to post'}).click();
+   assert.equal(await fresh.evaluate(()=>window.browserOpens),1);
+   signed=true;await fresh.evaluate(()=>window.communityChanged());
+   await fresh.getByRole('link',{name:'Sign out',exact:true}).click();
+   assert.equal(await fresh.evaluate(()=>window.logoutRequested),true);
+   signed=false;await fresh.evaluate(()=>window.communityChanged());
+   await fresh.getByRole('link',{name:'Sign in to post'}).waitFor();
+  }finally{await ctx.close();}
+ });
  await check('new desktop setup can finish at phone width and stays complete on restart',async()=>{
   const context=await browser.newContext({viewport:{width:390,height:844}});
-  await context.addInitScript(()=>{window.ageneticDesktop={getConnection:async()=>({error:'Local model offline'})}});
+  await context.addInitScript(()=>{window.ageneticDesktop={getConnection:async()=>({error:'Local model offline'}),onCommunityChanged(){}}});
   const fresh=await context.newPage();
   fresh.on('pageerror',error=>errors.push(error.message));
   try{

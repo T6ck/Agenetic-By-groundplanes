@@ -31,7 +31,8 @@
       "security.cjs",
       "renderer/**/*",
       "package.json",
-      "updates.cjs"
+      "updates.cjs",
+      "community.cjs"
     ],
     "asar": true,
     "extraResources": [
@@ -74,8 +75,16 @@
       {
         "provider": "github",
         "owner": "T6ck",
-        "repo": "Agenetic-By-groundplanes",
+        "repo": "AgeneticByGroundplanes",
         "releaseType": "release"
+      }
+    ],
+    "protocols": [
+      {
+        "name": "Agenetic",
+        "schemes": [
+          "agenetic"
+        ]
       }
     ]
   },

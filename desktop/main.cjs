@@ -1,9 +1,31 @@
-const {app,BrowserWindow,protocol,net,ipcMain,dialog,shell,session}=require('electron');const {spawn,execFile}=require('node:child_process');const {randomBytes}=require('node:crypto');const path=require('node:path');const fs=require('node:fs');const {pathToFileURL}=require('node:url');const {ORIGIN,isLocal,externalURL,assetPath}=require('./security.cjs');
+const {app,BrowserWindow,protocol,net,ipcMain,dialog,shell,session,safeStorage}=require('electron');const {spawn,execFile}=require('node:child_process');const {randomBytes}=require('node:crypto');const path=require('node:path');const fs=require('node:fs');const {pathToFileURL}=require('node:url');const {ORIGIN,isLocal,externalURL,assetPath}=require('./security.cjs');
 protocol.registerSchemesAsPrivileged([{scheme:'agenetic',privileges:{standard:true,secure:true,supportFetchAPI:true,corsEnabled:true}}]);
 let window,child,connectionError='',closing=false;
 let connectionResolve;const connection=new Promise(resolve=>connectionResolve=resolve);
-if(!app.requestSingleInstanceLock())app.quit();
-app.on('second-instance',()=>{if(window){if(window.isMinimized())window.restore();window.focus()}});
+const {makeCommunity, callbackTokens, signIn} = require('./community.cjs');
+const primary = app.requestSingleInstanceLock();
+let communityAccount;
+let pendingCallback = process.argv.map(callbackTokens).find(Boolean);
+let callbackQueue = Promise.resolve();
+function handleLink(value) {
+ const tokens = callbackTokens(value);
+ if (!tokens || !primary) return;
+ if (!communityAccount || !window) { pendingCallback = tokens; return; }
+ offerAccount(tokens);
+}
+function offerAccount(tokens) {
+ callbackQueue = callbackQueue.then(() => communityAccount.accept(tokens, async email => {
+  const answer = await dialog.showMessageBox(window, {type:'question', title:'Groundplanes Community',
+   message:'Sign in to Agenetic as ' + email + '?', buttons:['Cancel','Sign in'], defaultId:0, cancelId:0});
+  return answer.response === 1;
+ })).catch(error => dialog.showErrorBox('Community sign-in', error.message));
+}
+if (!primary) app.quit();
+app.on('open-url',(event,url)=>{ event.preventDefault(); handleLink(url); });
+app.on('second-instance',(_event,argv)=>{
+ if(window){if(window.isMinimized())window.restore();window.focus();}
+ for(const arg of argv)handleLink(arg);
+});
 function verify(event){if(!isLocal(event.senderFrame?.url||'')||event.senderFrame!==event.sender.mainFrame)throw Error('Untrusted caller')}
 async function startCompanion(){const root=app.isPackaged?process.resourcesPath:__dirname;const exe=path.join(root,'runtime',process.platform==='win32'?'agenetic-companion.exe':'agenetic-companion');if(!fs.existsSync(exe)){connectionError='Companion missing. Build the desktop runtime before packaging.';connectionResolve({error:connectionError});return}
  const key=randomBytes(32).toString('base64url'),args=['--desktop','--origin',ORIGIN,'--port','0','--models-dir',path.join(app.getPath('userData'),'models')];const llama=path.join(root,'runtime',process.platform==='win32'?'llama-cli.exe':'llama-cli');if(fs.existsSync(llama))args.push('--llama-cli',llama);
@@ -34,8 +56,14 @@ async function requestCompanion(route, payload, timeout) {
  }
 }
 app.whenReady().then(async()=>{
+ if (!primary) return;
+ if (app.isPackaged) app.setAsDefaultProtocolClient('agenetic');
+ communityAccount = makeCommunity({directory:app.getPath('userData'), storage:safeStorage,
+  changed:()=>{if(window && !window.isDestroyed())window.webContents.send('community:changed');}});
+ ipcMain.handle('community:logout',event=>{verify(event);communityAccount.logout();});
+
  session.defaultSession.setPermissionRequestHandler((_wc,_permission,callback)=>callback(false));session.defaultSession.setPermissionCheckHandler(()=>false);
- protocol.handle('agenetic',async request=>{try{const u=new URL(request.url);if(!isLocal(u.href))return new Response('Denied',{status:403});if(u.pathname==='/api/session')return Response.json({signedIn:false,scope:'guest',signIn:'https://groundplanes.com/signin?app=agenetic',signOut:'https://groundplanes.com/signin?signout=1'});if(u.pathname==='/api/models'){const {modelCatalog}=await import(pathToFileURL(path.join(__dirname,'renderer/model-catalog.mjs')).href);try{return Response.json(await modelCatalog(u.searchParams))}catch(e){return Response.json({error:e.message},{status:502})}}
+ protocol.handle('agenetic',async request=>{try{const u=new URL(request.url);if(!isLocal(u.href))return new Response('Denied',{status:403});if(['/api/session','/api/community','/api/community/session'].includes(u.pathname))return communityAccount.handle(request);if(u.pathname==='/api/models'){const {modelCatalog}=await import(pathToFileURL(path.join(__dirname,'renderer/model-catalog.mjs')).href);try{return Response.json(await modelCatalog(u.searchParams))}catch(e){return Response.json({error:e.message},{status:502})}}
  if(u.pathname.startsWith('/api/'))return Response.json({error:'Community opens separately in your browser.'},{status:503});const file=path.resolve(__dirname,'renderer',assetPath(u.href));if(!file.startsWith(path.resolve(__dirname,'renderer')+path.sep))return new Response('Denied',{status:403});return net.fetch(pathToFileURL(file).href)}catch{return new Response('Not found',{status:404})}});
  let pdfParsing = false;
  ipcMain.handle('vault:extract-pdf', async (event, bytes) => {
@@ -89,7 +117,7 @@ app.whenReady().then(async()=>{
   if (result.canceled || !result.filePaths.length) return {cancelled: true};
   return requestCompanion('/models/register', {path: result.filePaths[0]}, 30000);
  });
- ipcMain.handle('app:community',event=>{verify(event);return shell.openExternal('https://groundplanes.com/signin?app=agenetic')});ipcMain.handle('app:website',event=>{verify(event);return shell.openExternal('https://groundplanes.com')});
+ ipcMain.handle('app:community',event=>{verify(event);return shell.openExternal(signIn)});ipcMain.handle('app:website',event=>{verify(event);return shell.openExternal('https://groundplanes.com')});
  const releasePath=path.join(process.resourcesPath,'runtime','release.json');
  let release={};try{release=JSON.parse(fs.readFileSync(releasePath,'utf8').replace(/^\uFEFF/,''))}catch{}
  const updates=require('./updates.cjs').configureUpdates(require('electron-updater').autoUpdater,release,{packaged:app.isPackaged,platform:process.platform});
@@ -98,6 +126,7 @@ app.whenReady().then(async()=>{
  ipcMain.handle('app:release',event=>{verify(event);return releaseInfo;});
  ipcMain.handle('app:update',async event=>{verify(event);return {...await updates.check(),...releaseInfo};});
  ipcMain.handle('app:install-update',event=>{verify(event);return updates.install()?{}:{message:'Check for updates and wait for the download first.'};});
- window=new BrowserWindow({width:1440,height:960,minWidth:760,minHeight:640,title:'Agenetic by Groundplanes',backgroundColor:'#f4f7f6',webPreferences:{preload:path.join(__dirname,'preload.cjs'),backgroundThrottling:false,contextIsolation:true,nodeIntegration:false,sandbox:true,webSecurity:true}});window.removeMenu();window.webContents.on('will-navigate',(event,url)=>{if(!isLocal(url)){event.preventDefault();const safe=externalURL(url);if(safe)shell.openExternal(safe)}});window.webContents.setWindowOpenHandler(({url})=>{const safe=externalURL(url);if(safe)shell.openExternal(safe);return {action:'deny'}});startCompanion();await window.loadURL(ORIGIN+'/');
+ window=new BrowserWindow({width:1440,height:960,minWidth:760,minHeight:640,title:'Agenetic by Groundplanes',backgroundColor:'#f4f7f6',webPreferences:{preload:path.join(__dirname,'preload.cjs'),backgroundThrottling:false,contextIsolation:true,nodeIntegration:false,sandbox:true,webSecurity:true}});window.removeMenu();window.webContents.on('will-navigate',(event,url)=>{if(!isLocal(url)){event.preventDefault();const safe=externalURL(url);if(safe)shell.openExternal(safe)}});window.webContents.setWindowOpenHandler(({url})=>{const safe=externalURL(url);if(safe)shell.openExternal(safe);return {action:'deny'}});startCompanion();
+ if(pendingCallback){offerAccount(pendingCallback);pendingCallback=null;}await window.loadURL(ORIGIN+'/');
 });
 app.on('before-quit',()=>{closing=true;child?.kill()});app.on('window-all-closed',()=>app.quit());

@@ -195,9 +195,9 @@ function calculateNetwork(force=false) {
   if(signature===network.signature&&!force)return;
   network.signature=signature;
   if(spatialLayout(network.layout)){
-    const {cloud,landmarks,regions}=atlasCloud(nodes,links);
+    const {cloud,landmarks,regions,ridges}=atlasCloud(nodes,links);
     network.cloud=network.layout==='atlas'?cloud:spatialCloud(regions);
-    network.landmarks=landmarks;network.regions=regions;network.kinds=new Map(nodes.map(n=>[n.id,n.kind]));
+    network.landmarks=landmarks;network.regions=regions;network.ridges=ridges;network.kinds=new Map(nodes.map(n=>[n.id,n.kind]));
     updateProjection();
     return;
   }
@@ -514,7 +514,7 @@ function fitNetwork(onlyIds) {
   }
   if (!Number.isFinite(minX)) return;
   if(!onlyIds&&network.layout==='atlas'&&!network.focus&&!network.search&&network.types.size===4){
-    // The full surface is the fit target, including its posterior lobe and stem.
+    // Frame the full relief, including its outer contours.
     const paths=stage.querySelector('.atlas-surface');
     const box=paths?.getBBox();
     if(box?.width&&box.height){minX=box.x-16;maxX=box.x+box.width+16;minY=box.y-16;maxY=box.y+box.height+16;}
@@ -714,7 +714,7 @@ async function networkAction(action,key) {
   if(action==='graph'||action==='canvas') {
     if(activeSpace().viewMode===action)return;
     activeSpace().viewMode=action;network.needFit=action==='graph'&&!activeSpace()[graphCameraKey(workspaceGraphLayout(activeSpace()))];studio.inspector=false;studio.selected.clear();await save();
-    if(document.startViewTransition&&appearance().motion!==false&&!matchMedia('(prefers-reduced-motion: reduce)').matches)document.startViewTransition(()=>render());else render();return;
+    render();return;
   }
   if(action==='orbit-root'&&network.layout==='orbit'&&spaceNodes().some(n=>n.id===key)){
     const space=activeSpace(),previous=space.orbitRoot;space.orbitRoot=key;

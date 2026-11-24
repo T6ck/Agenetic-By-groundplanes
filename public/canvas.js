@@ -219,7 +219,7 @@ function zoomAt(factor,x,y) {
   studio.view={x:x-(x-old.x)*scale/old.scale,y:y-(y-old.y)*scale/old.scale,scale};applyCamera();
 }
 function showSpaces() {
-  modal('Workspaces','<div class="space-list">'+data.spaces.map(s=>studioButton('switch-space',esc(s.name)+' <span>↗</span>',s.id)).join('')+'</div><form id="new-space"><label class="field">New workspace<input name="name" placeholder="e.g. Product research" maxlength="80" required></label><button class="primary">Create workspace</button></form>');
+  modal('Workspaces','<div class="space-list">'+data.spaces.map(s=>studioButton('switch-space',esc(s.name)+' <span>↗</span>',s.id)).join('')+'</div><form id="new-space"><label class="field">New workspace<input name="name" placeholder="Project name" maxlength="80" required></label><label class="field">Start with<select name="starter"><option value="">Empty workspace</option>'+Object.entries(projectStarters).map(([key,p])=>'<option value="'+key+'">'+esc(p.name)+'</option>').join('')+'</select></label><button class="primary">Create workspace</button></form>');
 }
 async function groupSelection() {
   if(studio.selected.size<2){toast('Shift-click cards or Shift-drag a selection, then group them.');return}
@@ -416,7 +416,8 @@ document.addEventListener('submit',async e=>{
   if(e.target.id==='studio-editor'){e.preventDefault();if(await saveEditor()){studio.inspector=false;render();toast('Saved.')}return}
   if(e.target.id==='new-space'){
     e.preventDefault();const name=new FormData(e.target).get('name').trim();if(!name)return;
-    await commitStudio(()=>{const id=crypto.randomUUID();data.spaces.push({id,name,members:[],positions:{},groups:[]});data.activeSpace=id;studio.selected.clear();studio.inspector=false;studio.view={x:0,y:0,scale:1}});$('#dialog').close();return;
+    const starter=new FormData(e.target).get('starter');
+    const created=await commitStudio(()=>{const id=crypto.randomUUID(),space={id,name,members:[],positions:{},groups:[]};data.spaces.push(space);populateProject(space,starter);data.activeSpace=id;studio.selected.clear();studio.inspector=false;studio.view={x:0,y:0,scale:1}});if(created)$('#dialog').close();return;
   }
   if(e.target.id==='new-group'){
     e.preventDefault();const name=new FormData(e.target).get('name').trim();if(!name)return;

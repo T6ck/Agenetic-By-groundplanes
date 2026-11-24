@@ -1,7 +1,7 @@
 'use strict';
 // Shared object vocabulary and reading surfaces.
 function objectLabel(n){
- if(n.kind==='file')return n.research?researchStateLabel(n):(n.pdfIndex||n.size&&!n.text?'Source':'Note');
+ if(n.kind==='file')return n.research?researchStateLabel(n):productionRole(n.name)||(n.pdfIndex||n.size&&!n.text?'Source':'Note');
  if(n.kind==='task')return ({complete:'Complete','in progress':'Running',planned:'Task',paused:'Paused',blocked:'Blocked',cancelled:'Cancelled'})[n.status]||'Task';
  return n.kind==='model'?'Model':'Agent';
 }
@@ -25,6 +25,10 @@ networkNode=function(n,links){
 const workbenchCamera=applyNetworkCamera;
 applyNetworkCamera=function(){const svg=$('.knowledge-svg');if(svg)svg.dataset.detail=network.camera.scale>=.8?'full':'compact';workbenchCamera();};
 function readerPassageHtml(file) {
+ if(productionRole(file.name)==='Captions'){
+  const cues=captionCues(file.text);
+  if(cues.length)return '<ol class="caption-sheet">'+cues.map(c=>'<li><time>'+esc(c.start)+'</time><span>'+esc(c.dialogue)+'</span></li>').join('')+'</ol>';
+ }
  const notes=new Map();
  for(const item of spaceNodes()){
   if(item.kind!=='file')continue;
@@ -73,3 +77,25 @@ document.addEventListener('click',event=>{
  document.documentElement.dataset.mobileExplorer=document.documentElement.dataset.mobileExplorer==='open'?'closed':'open';
  event.target.closest('button').setAttribute('aria-expanded',String(document.documentElement.dataset.mobileExplorer==='open'));
 },true);
+
+// Animate a destination once. Editing a field, fetching posts or moving the
+// camera also renders the screen and must leave the current view still.
+const renderDestination=render;
+let lastDestination='';
+render=function(){
+ renderDestination();
+ const stage=document.querySelector('.network-stage');
+ const destination=page+'|'+(stage?stage.dataset.layout:activeSpace()?.viewMode||'')+'|'+activeSpace()?.id;
+ const changed=lastDestination && lastDestination!==destination;
+ lastDestination=destination;
+ if(!changed||appearance().motion===false||matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+ const content=document.querySelector('#content');
+ const surface=stage?.querySelector('.knowledge-svg')||content.querySelector('.space-stage,.community-feed,.desk-columns,main')||content.firstElementChild;
+ const heading=stage?.querySelector('.network-context')||content.querySelector('h1');
+ const timing={duration:280,easing:'cubic-bezier(.18,.76,.25,1)'};
+ surface?.animate?.([{opacity:.22,translate:'0 8px'},{opacity:1,translate:'0 0'}],timing);
+ const guides=stage?.querySelector('.atlas-surface,.flow-columns,.cluster-guides,.orbit-guides');
+ guides?.animate?.([{opacity:0},{opacity:1}],{...timing,duration:360});
+ stage?.querySelector('.network-nodes')?.animate?.([{opacity:0},{opacity:1}],{...timing,delay:60,fill:'backwards'});
+ heading?.animate?.([{opacity:.12,translate:'-8px 0'},{opacity:1,translate:'0 0'}],{...timing,duration:220});
+};

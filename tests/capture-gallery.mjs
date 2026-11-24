@@ -65,7 +65,7 @@ try{
   async function theme(name){await page.evaluate(value=>{appearance().theme=value;render();},name);await settle();}
   await theme('porcelain');
   if(wants('atlas')||wants('atlas-graphite')){
-    await layout('atlas');
+    await theme('linen');await layout('atlas');
     if(wants('atlas'))await screenshot('atlas');
     if(wants('atlas-graphite')){
       await theme('graphite');await screenshot('atlas-graphite');await theme('porcelain');
@@ -147,6 +147,45 @@ try{
       await page.locator('.quote-comparison').waitFor();
       assert.equal(await page.locator('.quote-window mark').count(),2);
       await screenshot('review');
+    }
+  }
+  if(wants('cut-room')||wants('palette')){
+    await page.evaluate(()=>{page='Graph';render();showSpaces()});
+    const form=page.locator('#new-space');
+    await form.locator('[name=name]').fill('North Pier / Picture lock');
+    await form.locator('[name=starter]').selectOption('edit');
+    await form.locator('button').click();
+    await layout('flow');await theme('linen');
+    assert.equal(await page.locator('.knowledge-node').count(),7);
+    if(wants('cut-room')){
+      const picker=page.waitForEvent('filechooser');
+      await page.locator('[data-command=import]').click();
+      await (await picker).setFiles({name:'Pier interview.srt',mimeType:'text/plain',buffer:Buffer.from('1\n00:00:03,125 --> 00:00:07,480\nThe tide was already coming in.\n\n2\n00:00:09,200 --> 00:00:12,760\nWe kept the camera on the water.\n\n3\n00:00:15,040 --> 00:00:19,520\nThat was the last boat of the morning.')});
+      await page.locator('[data-network=open]').filter({hasText:'Pier interview.srt'}).click();
+      assert.equal(await page.locator('.caption-sheet li').count(),3);
+      await screenshot('cut-room');
+      await page.locator('[aria-label="Close inspector"]').first().click();
+    }
+    if(wants('palette')){
+      await theme('cobalt');
+      await page.locator('[data-network=appearance]').first().click();
+      await page.locator('[data-edit-palette]').click();
+      await page.locator('#palette-editor').waitFor();
+      await screenshot('palette');
+      await page.locator('#palette-editor [name=name]').fill('North Pier');
+      await page.locator('#palette-editor button.primary').click();
+      await page.locator('#palette-editor').waitFor({state:'hidden'});
+      const downloaded=page.waitForEvent('download');
+      await page.locator('[data-theme-export]').click();
+      await page.locator('[data-confirm]').click();
+      const path=await (await downloaded).path();
+      await theme('linen');
+      await page.locator('#appearance-import').setInputFiles(path);
+      await page.locator('[data-package-install]').click();
+      await page.locator('[data-confirm]').click();
+      await page.waitForFunction(()=>appearance().theme==='community'&&theme().name==='North Pier');
+      await page.reload();
+      await page.waitForFunction(()=>document.querySelector('.knowledge-node')&&theme().name==='North Pier');
     }
   }
   assert.deepEqual(errors,[]);

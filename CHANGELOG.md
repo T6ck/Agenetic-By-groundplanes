@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Atlas draws a contour map from connected records. Graph and screen changes respect reduced motion.
+- Added Video edit, 3D production, and Model evaluation workspaces with linked notes and tasks. Import captions, edit lists, OBJ meshes, glTF manifests, notebooks, and JSONL datasets.
+- Added Plotter and Blueprint palettes and a palette editor. Export your colors and display settings from Appearance.
+
 - Browse community channels in the desktop app. Sign in through Groundplanes to publish, report posts, or share packages.
 
 - Removed a missing test script from the standalone workspace page and retired two unused copies of the old model runner.

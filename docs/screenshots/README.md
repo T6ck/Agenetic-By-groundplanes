@@ -1,16 +1,10 @@
 # Agenetic screenshots
 
-These are captures of the Fieldwork example in the Porcelain theme. Select an image to view it at full size.
+Select a screenshot to open the full-size capture.
 
-## Turning and pulling the graph
-
-| Atlas | After a vertical drag | After a roll |
+| Atlas in Plotter | Video edit with captions | Blueprint palette editor |
 | --- | --- | --- |
-| [![Atlas with the full workspace visible](gallery/atlas.webp)](gallery/atlas.webp) | [![The same Atlas tilted vertically](gallery/atlas-tilt.webp)](gallery/atlas-tilt.webp) | [![The tilted Atlas rolled sideways](gallery/atlas-roll.webp)](gallery/atlas-roll.webp) |
-| **Spatial** | **After turning** | **Pulling a record** |
-| [![The same records in open 3D space](gallery/spatial-home.webp)](gallery/spatial-home.webp) | [![Spatial from a different angle](gallery/spatial-turned.webp)](gallery/spatial-turned.webp) | [![A record and its neighbors during a pull](gallery/spatial-pull.webp)](gallery/spatial-pull.webp) |
-
-[Atlas in the Graphite theme](gallery/atlas-graphite.webp)
+| [![Connected record groups drawn as contours](gallery/atlas.webp)](gallery/atlas.webp) | [![Timed dialogue beside the picture-lock workflow](gallery/cut-room.webp)](gallery/cut-room.webp) | [![Editing the Blueprint palette](gallery/palette.webp)](gallery/palette.webp) |
 
 ## Other layouts
 

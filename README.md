@@ -11,7 +11,7 @@
 <a href="https://groundplanes.com"><img alt="Website" src="https://img.shields.io/badge/groundplanes.com-site-2b2f36"></a>
 </p>
 
-Agenetic is a Windows app for working through a research question with your own sources. Put your notes and PDFs in a workspace, connect them in the graph, and open the passage behind a claim. If you use a language model to draft a brief, you can run it on your own machine.
+Agenetic is a local Windows workspace for connected project files. Trace a research claim to its source, read timed captions beside an edit brief, inspect a scene manifest, or connect a model evaluation to its dataset and run notes. Use **Workspaces → New workspace** to start a video edit, 3D production, or model evaluation.
 
 [Download the Windows x64 beta](https://github.com/T6ck/AgeneticByGroundplanes/releases) · [Release notes](CHANGELOG.md) · [Groundplanes](https://groundplanes.com)
 

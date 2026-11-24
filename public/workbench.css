@@ -408,3 +408,29 @@ html body .network-context .layout-hint { color:var(--ax-muted); font:13px/1.4 v
 }
 html body .network-stage:is([data-layout=orbit],[data-layout=clusters]) .node-state-label { display:none; }
 html body .network-stage[data-layout=orbit] .orbit-center .atlas-halo { stroke:var(--ax-ink); stroke-width:2px; opacity:1; }
+
+/* Printed relief, connector rails and distinct working surfaces. */
+html body .atlas-surface { stroke-width:1.05; }
+html body .atlas-surface .far { opacity:.34; }
+html body .atlas-surface .near { opacity:.70; stroke-width:1.45; }
+html body .cluster-guides .district-frame { fill:currentColor;fill-opacity:.065;stroke:currentColor;stroke-opacity:.42;stroke-width:1.25; }
+html body .orbit-guides circle { stroke:var(--ax-accent);stroke-dasharray:2 5;stroke-width:1.2; }
+html body .flow-lane path { fill:none;stroke:var(--ax-accent);stroke-width:2; }
+html body .flow-lane text,.cluster-guides text { font:600 12px var(--font-mono,monospace);letter-spacing:.04em; }
+html body .network-stage[data-layout=atlas] { background-color:var(--ax-bg)!important;background-image:radial-gradient(ellipse at 45% 48%,color-mix(in srgb,var(--node-file) 7%,var(--ax-bg)),var(--ax-bg) 80%)!important; }
+html body .network-context h1 { letter-spacing:-.035em; }
+html body .palette-edit { width:100%;margin:8px 0 12px;border:1px solid var(--ax-line);padding:9px; }
+.palette-fields { display:grid;grid-template-columns:1fr 1fr;gap:6px 20px; }
+.palette-fields label { display:flex;align-items:center;justify-content:space-between;gap:10px;color:var(--ax-ink); }
+.palette-fields input[type=color] { width:36px;height:29px;padding:2px; }
+.palette-proof { display:grid;gap:5px;padding:16px;margin:14px 0;background:var(--sample-panel);color:var(--sample-ink);border:1px solid var(--sample-line);border-left:5px solid var(--sample-accent); }
+.palette-proof span { color:var(--sample-muted); }
+
+.atlas-record .compact-mark { display:none }
+html[data-node-style=compact] .atlas-record .compact-mark { display:inline }
+html[data-node-style=compact] .atlas-record .spatial-solid { display:none }
+
+.caption-sheet { margin:0;padding:0;list-style:none;white-space:normal; }
+.caption-sheet li { border-top:1px solid var(--ax-line);padding:10px 0;display:grid;gap:3px; }
+.caption-sheet time { color:var(--ax-muted);font:12px var(--font-mono,monospace); }
+.caption-sheet span { white-space:pre-wrap; }

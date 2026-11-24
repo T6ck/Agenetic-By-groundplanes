@@ -76,7 +76,8 @@ test('downstream citations include indirect dependents, skip superseded claims a
  assert.ok(!afterCorrection.rows.some(r=>r.record.id==='d')&&afterCorrection.ids.has('d'));
 });
 test('active rotation samples decorative geometry and release restores the full surface at the same angle',()=>{
- const q=api.homeOrientation(.2),still=api.atlasSurfacePaths(q),moving=api.atlasSurfacePaths(q,true);
+ const ridges=api.atlasCloud(nodes('abc'),[link('a','b')]).ridges;
+ const q=api.homeOrientation(.2),still=api.atlasSurfacePaths(q,false,ridges),moving=api.atlasSurfacePaths(q,true,ridges);
  assert.equal(moving.length,still.length);assert.ok(moving.join('').length<still.join('').length*.3);
- assert.equal(api.atlasSurfacePaths(q,false),still);
+ assert.equal(api.atlasSurfacePaths(q,false,ridges),still);
 });

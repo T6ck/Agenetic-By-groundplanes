@@ -4,7 +4,7 @@
 // participate in selection, counts, search, and traversal.
 const graphLayouts = {atlas:'Atlas',spatial:'Spatial',clusters:'Clusters',orbit:'Orbit',flow:'Flow',freeform:'Freeform'};
 const graphLayoutHelp = {
-  atlas:'Drag the surface to rotate. Pull a record to follow its links.',
+  atlas:'Each ridge groups connected records. Drag to turn the map.',
   spatial:'Drag the space to rotate. Pull a record to trace its neighbors.',
   clusters:'Follow links between groups of related records.',
   orbit:'Each ring adds a link from the center. Open a record to recenter.',
@@ -19,13 +19,14 @@ function workspaceGraphLayout(space) {
 function graphCameraKey(layout) {
   return layout==='freeform'||!Object.hasOwn(graphLayouts,layout)?'graphCamera':layout+'Camera';
 }
-function atlasSurface(u,v) {
-  const s=Math.sin(u), c=Math.cos(u), side=Math.sin(v), up=Math.cos(v);
-  const seam=1-.095*Math.exp(-32*side*side);
-  const fold=1+.021*Math.sin(14*u+2.7*Math.sin(5*v))+.012*Math.cos(9*v-5*u);
-  const temporal=up<0 ? 34*Math.exp(-Math.pow((u-1.28)/.34,2))*up*up : 0;
-  return [-310*c, -174*s*up*seam*fold - 17*c + temporal - 23*c*c,
-    132*s*side*fold*(1+.12*c)];
+// Each connected region gets a stack of elevation contours. The outer
+// contour is its footprint and the hub sits at the summit.
+function ridgePoint(ridge,r,angle) {
+  const ripple=1+.14*Math.sin(3*angle+ridge.phase)+.075*Math.cos(2*angle-ridge.phase);
+  const x=ridge.x+Math.cos(angle)*ridge.width*r*ripple;
+  const y=ridge.y+Math.sin(angle)*ridge.width*.72*r*ripple;
+  const h=ridge.height*(1-r*r);
+  return [x,y*.86-h*.53,h*.85+y*.5];
 }
 function spatialLayout(layout) {
   return layout==='atlas'||layout==='spatial';
@@ -62,71 +63,25 @@ function projectPoint([x,y,z],m) {
   const depth=m[6]*x+m[7]*y+m[8]*z,scale=graphLens/(graphLens-depth);
   return [(m[0]*x+m[1]*y+m[2]*z)*scale,(m[3]*x+m[4]*y+m[5]*z)*scale,depth,scale];
 }
-// Geometry is generated once. Each pass batches many fibers in one SVG path.
-let atlasFibers,orbitFibers;
-const previousSurface=new Map();
-function atlasSurfacePaths(orientation,duringOrbit=false) {
-  const cached=previousSurface.get(duringOrbit);
-  if(cached?.orientation===orientation)return cached.paths;
-  if (!atlasFibers) {
-    atlasFibers=[];
-    for(let band=0;band<88;band++) {
-      const v=band*Math.PI*2/88;
-      const points=[];
-      for(let k=0;k<=85;k++) {
-        const u=.08+k*(Math.PI-.16)/85;
-        const winding=.12*Math.sin(10*u+1.8*Math.sin(3*v))+.075*Math.sin(18*u-4*v);
-        points.push(atlasSurface(u,v+winding*Math.sin(u)));
+const reliefCache=new WeakMap();
+function atlasSurfacePaths(orientation,duringOrbit,ridges) {
+  let cached=reliefCache.get(ridges);
+  if(!cached){cached=new Map();reliefCache.set(ridges,cached);}
+  if(cached.get(duringOrbit)?.orientation===orientation)return cached.get(duringOrbit).paths;
+  const matrix=viewMatrix(orientation),bands=Array.from({length:8},()=>[]);
+  for(const ridge of ridges.slice(0,48)){
+    const steps=duringOrbit?20:64;
+    for(let level=1;level<=14;level+=duringOrbit?3:1){
+      const ring=[],r=Math.sqrt(level/14);
+      for(let i=0;i<steps;i++){
+        const [x,y]=projectPoint(ridgePoint(ridge,r,i*2*Math.PI/steps),matrix);
+        ring.push(x.toFixed(1)+' '+y.toFixed(1));
       }
-      atlasFibers.push(points);
-    }
-    // Cross-sections define the hemisphere cleft and the contours at either pole.
-    for(let k=1;k<30;k++) {
-      const u=k*Math.PI/30,points=[];
-      for(let i=0;i<=86;i++){
-        const v=i*Math.PI*2/86;
-        points.push(atlasSurface(u+.045*Math.sin(5*v+u*9)*Math.sin(u),v));
-      }
-      atlasFibers.push(points);
-    }
-    // A smaller folded posterior lobe and tapering stem orient the lateral view.
-    for(let k=1;k<27;k++){
-      const u=k*Math.PI/27,points=[];
-      for(let i=0;i<=60;i++){
-        const v=i*Math.PI*2/60,ring=Math.sin(u);
-        points.push([120+96*ring*Math.cos(v),123-57*Math.cos(u)-15*ring*Math.cos(v),79*ring*Math.sin(v)]);
-      }
-      atlasFibers.push(points);
-    }
-    for(let k=0;k<24;k++){
-      const v=k*Math.PI/12,points=[];
-      for(let i=0;i<=20;i++){
-        const f=i/20,r=33-20*f;
-        points.push([57+43*f+r*Math.cos(v),118+102*f, r*Math.sin(v)]);
-      }
-      atlasFibers.push(points);
-    }
-  }
-  // During a drag, sample the decorative surface more sparsely. Every record
-  // and every data edge still moves on every update. Release restores detail.
-  if(duringOrbit&&!orbitFibers){
-    orbitFibers=atlasFibers.filter((_,i)=>i%3===0).map(curve=>curve.filter((_,i)=>i%3===0||i===curve.length-1));
-  }
-  const matrix=viewMatrix(orientation);
-  const bands=Array.from({length:8},()=>[]);
-  for(const curve of duringOrbit?orbitFibers:atlasFibers){
-    let last=-1,previous='';
-    for(const p of curve){
-      const [x,y,z]=projectPoint(p,matrix);
-      const region=p[1]>103?3:p[0]<-100?0:p[0]>95?2:1;
-      const band=region+(z>0?4:0);
-      const coord=x.toFixed(1)+' '+y.toFixed(1);
-      bands[band].push(last===band?'L'+coord:'M'+(previous?previous+'L':'')+coord);
-      previous=coord;last=band;
+      bands[ridge.zone+(level%4===1?4:0)].push('M'+ring.join('L')+'Z');
     }
   }
   const paths=bands.map(b=>b.join(''));
-  previousSurface.set(duringOrbit,{orientation,paths});return paths;
+  cached.set(duringOrbit,{orientation,paths});return paths;
 }
 function atlasCloud(nodes,links) {
   const adjacent=new Map(nodes.map(n=>[n.id,new Set()]));
@@ -163,16 +118,17 @@ function atlasCloud(nodes,links) {
   for(const n of order)(owners.has(n.id)?clusters[owners.get(n.id)]:loose).push(n);
   if(loose.length)clusters.push(loose);
   const cloud=new Map(),landmarks=new Set();
+  const ridges=[];
   clusters.forEach((group,index)=>{
-    const count=clusters.length,longitude=(index+.5)/count;
-    const u0=Math.acos(1-2*longitude);
-    const v0=count>10?index*2.399963:1.1+(index%2)*1.03;
-    const span=Math.min(1.14,1.45/Math.sqrt(count));
+    const angle=index*2.399963,spread=Math.sqrt(index/Math.max(1,clusters.length-1));
+    const width=Math.min(224,240/Math.sqrt(clusters.length))*(.84+.16*Math.min(1,group.length/8));
+    const ridge={x:Math.cos(angle)*spread*258,y:Math.sin(angle)*spread*173,
+      width,height:group===loose?18:42+Math.min(63,Math.sqrt(group.length)*11),
+      phase:index*1.71,zone:index%4};
+    ridges.push(ridge);
     group.forEach((n,j)=>{
-      const radius=Math.sqrt((j+.18)/group.length),theta=j*2.399963;
-      const u=Math.max(.13,Math.min(Math.PI-.13,u0+span*radius*Math.cos(theta)));
-      const v=v0+radius*Math.sin(theta)*Math.min(2.9,2.6/Math.sqrt(count)+.6);
-      cloud.set(n.id,atlasSurface(u,v));
+      const r=j===0?0:Math.sqrt(j/group.length)*.97,theta=j*2.399963+index;
+      cloud.set(n.id,ridgePoint(ridge,r,theta));
       if((j===0||j<3&&group.length>=12)&&landmarks.size<12)landmarks.add(n.id);
     });
   });
@@ -185,7 +141,7 @@ function atlasCloud(nodes,links) {
     const a=owners.get(from),b=owners.get(to);
     if(a!==undefined&&b!==undefined&&a!==b){regions[a].boundary++;regions[b].boundary++;}
   }
-  return {cloud,landmarks,regions};
+  return {cloud,landmarks,regions,ridges};
 }
 function flowArrangement(nodes) {
   const positions=new Map(),columns=[];
@@ -273,7 +229,7 @@ function layoutGuides(nodes){
   }
   return '<g class="cluster-guides" aria-hidden="true">'+network.districts.map((g,i)=>{
     if(!g.ids.some(id=>ids.has(id)))return '';
-    return '<g class="district-'+i%4+'"><circle cx="'+g.x+'" cy="'+g.y+'" r="'+g.radius+'"/><text text-anchor="middle" x="'+g.x+'" y="'+(g.y-g.radius-9)+'">'+esc(g.name.length>26?g.name.slice(0,25)+'…':g.name)+'</text></g>';
+    return '<g class="district-'+i%4+'"><rect class="district-frame" x="'+(g.x-g.radius)+'" y="'+(g.y-g.radius)+'" width="'+g.radius*2+'" height="'+g.radius*2+'" rx="18"/><text text-anchor="middle" x="'+g.x+'" y="'+(g.y-g.radius-9)+'">'+esc(g.name.length>26?g.name.slice(0,25)+'…':g.name)+'</text></g>';
   }).join('')+'</g>';
 }
 // Spread each connected region around its hub. In contrast to the Atlas shell,
@@ -354,11 +310,19 @@ function prismMesh(sides) {
     const j=(i+1)%sides;return [i,j,j+sides,i+sides];
   })]};
 }
+function plateMesh(outline,depth){
+  const count=outline.length;
+  const vertices=[-depth,depth].flatMap(z=>outline.map(([x,y])=>[x,y,z]));
+  const face=outline.map((_,i)=>i);
+  return {vertices,faces:[face,face.map(i=>i+count),...face.map(i=>{
+    const next=(i+1)%count;
+    return [i,next,next+count,i+count];
+  })]};
+}
 const spatialMeshes={
-  file:{vertices:[[1,0,0],[0,1,0],[-1,0,0],[0,-1,0],[0,0,1],[0,0,-1]],
-    faces:[[0,1,4],[1,2,4],[2,3,4],[3,0,4],[0,1,5],[1,2,5],[2,3,5],[3,0,5]]},
-  agent:prismMesh(4),
-  task:{vertices:[[0,-1.12,-.5],[-1,.74,-.5],[1,.74,-.5],[0,.12,1.1]],faces:[[0,1,2],[0,1,3],[1,2,3],[2,0,3]]},
+  file:plateMesh([[-.80,-1],[.32,-1],[.85,-.47],[.85,1],[-.80,1]],.21),
+  agent:plateMesh([[-1,-.52],[-.54,-.92],[1,-.92],[1,.52],[.54,.92],[-1,.92]],.42),
+  task:plateMesh([[-1,-.75],[.36,-.75],[1,0],[.36,.75],[-1,.75]],.31),
   model:prismMesh(6)
 };
 function solidFaces(mesh,matrix) {
@@ -387,14 +351,14 @@ function graphViewUnderlay(nodes) {
   if(network.layout==='flow'){
     const visible=new Set(nodes.map(n=>n.kind));
     return '<g class="flow-columns" aria-hidden="true">'+network.flowColumns.filter(c=>visible.has(c.kind)).map(c=>
-      '<text x="'+c.x+'" y="'+c.y+'">'+esc(c.label)+'</text>').join('')+'</g>';
+      '<g class="flow-lane lane-'+c.kind+'"><path d="M'+(c.x-17)+' '+(c.y+12)+'h102 M'+(c.x-17)+' '+(c.y+12)+'v8"/><text x="'+(c.x-17)+'" y="'+c.y+'">'+esc(c.label)+'</text></g>').join('')+'</g>';
   }
   if(network.layout==='spatial')return spatialDefinitions();
   if(network.layout!=='atlas')return '';
-  const paths=atlasSurfacePaths(network.orientation);
+  const paths=atlasSurfacePaths(network.orientation,false,network.ridges);
   return spatialDefinitions()+'<g class="atlas-surface" aria-hidden="true">'+paths.map((d,i)=>
     '<g class="zone-'+(i%4)+(i<4?' far':' near')+'"><path id="atlas-fiber-'+i+'" class="atlas-fiber" d="'+d+'"/>'+
-    '<use href="#atlas-fiber-'+i+'" class="atlas-grain"/></g>').join('')+'</g>';
+    '</g>').join('')+'</g>';
 }
 function graphLinkPath(a,b,layout) {
   const [x,y]=a,[tx,ty]=b;
@@ -417,7 +381,7 @@ function atlasNode(n,links) {
   const [x,y]=network.positions.get(n.id),degree=degreeFor(n.id,links);
   const spatial=spatialLayout(network.layout);
   const radius=(4.3+Math.min(6,Math.sqrt(degree)*1.4))*network.nodeScale*(spatial?1.22:1);
-  const shape={file:'M0 -1 1 0 0 1 -1 0Z',agent:'M-.85 -.85H.85V.85H-.85Z',task:'M0 -1 1 .8H-1Z',model:'M-.5 -.9H.5L1 0 .5 .9H-.5L-1 0Z'};
+  const shape={file:'M-.8 -1H.32L.86 -.45V1H-.8Z',agent:'M-.98 -.58L-.56 -.96H.98V.58L.56 .96H-.98Z',task:'M-.95 -.8H.4L1 0 .4 .8H-.95Z',model:'M-.5 -.9H.5L1 0 .5 .9H-.5L-1 0Z'};
   const name=n.name.replace(/\.md$/i,''),label=objectLabel(n);
   const landmark=!spatialLayout(network.layout)||network.landmarks.has(n.id);
   const scale=spatial?network.depths.get(n.id).scale:1;
@@ -425,7 +389,7 @@ function atlasNode(n,links) {
     (studio.selected.has(n.id)?' selected':'')+'" data-knowledge-node="'+esc(n.id)+'" transform="translate('+x+' '+y+')" tabindex="-1" role="button" aria-label="Open '+esc(n.name)+' · '+esc(label)+'">'+
     '<title>'+esc(n.name)+' · '+esc(label)+' · '+degree+' connections</title><circle class="node-hit" r="'+Math.max(15,radius+7)+'"/>'+
     '<g class="depth-glyph" transform="scale('+scale+')" opacity="'+(spatial?glyphDepthInk(network.depths.get(n.id).depth):1)+'"><circle class="orb-body geometry-measure" r="'+radius+'"/><circle class="atlas-halo" r="'+(radius+5)+'"/>'+
-    (spatial?'<use class="spatial-solid" href="#solid-'+n.kind+'" transform="scale('+radius+')"/>':'<path class="atlas-mark" d="'+shape[n.kind]+'" transform="scale('+radius+')"/>')+'</g><line class="node-tether"/>'+
+    (spatial?'<use class="spatial-solid" href="#solid-'+n.kind+'" transform="scale('+radius+')"/>':'')+'<path class="atlas-mark'+(spatial?' compact-mark':'')+'" d="'+shape[n.kind]+'" transform="scale('+radius+')"/>'+'</g><line class="node-tether"/>'+
     '<text x="12" y="4">'+esc(name.length>40?name.slice(0,37)+'…':name)+'<tspan class="node-state-label" x="12" dy="15">'+esc(label)+'</tspan></text></g>';
 }
 function paintSpatialGraph(svg,duringGesture=false) {
@@ -446,7 +410,7 @@ function paintSpatialGraph(svg,duringGesture=false) {
     for(const {mesh,faces} of graph.solids)solidFaces(mesh,network.matrix).forEach((d,i)=>faces[i]?.setAttribute('d',d));
   }
   if(graph.fibers.length&&(graph.orientation!==network.orientation||graph.rotating!==rotating)){
-    atlasSurfacePaths(network.orientation,rotating).forEach((d,i)=>graph.fibers[i].setAttribute('d',d));
+    atlasSurfacePaths(network.orientation,rotating,network.ridges).forEach((d,i)=>graph.fibers[i].setAttribute('d',d));
   }
   for(const id of affected?affected.keys():graph.nodes.keys()){
     const glyph=graph.glyphs.get(id);

@@ -15,12 +15,12 @@ Agenetic is a local Windows workspace for connected project files. Trace a resea
 
 [Download the Windows x64 beta](https://github.com/T6ck/AgeneticByGroundplanes/releases) · [Release notes](CHANGELOG.md) · [Groundplanes](https://groundplanes.com)
 
-![The Fieldwork sources grouped into strands in Signal field](docs/screenshots/gallery/signal-field.webp)
+![An evening handoff beside interface counters in the source workspace](docs/screenshots/gallery/source-workspace.webp)
 
 ## Getting started
 
 1. Download the Windows x64 setup EXE from the release assets and run it.
-2. Open the Fieldwork example to try the graph, or create a workspace and import a source.
+2. Open a file in Fieldwork or import your own. Choose **Read alongside** to compare two files. **Add linked note** saves a finding with links to both sources. The workspace reopens those files when you return.
 3. Open **Models** if you want to run a local model. The installer includes the llama.cpp CPU runner. Choose a GGUF file you already have or download one from Hugging Face.
 
 Open **Navigate → Releases → Check for updates** to see your installed version. Signed betas download updates in the background and apply them when you close Agenetic. If you have an older unsigned preview, install a signed beta once to switch channels.

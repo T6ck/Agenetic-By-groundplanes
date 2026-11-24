@@ -25,6 +25,27 @@ const checks=[];
 async function check(name,run){await run();checks.push(name);console.log('PASS '+name);}
 try{
  await page.goto('http://127.0.0.1:'+server.address().port);
+ await check('source workspace restores files, comparison and draft across reload and workspace switches',async()=>{
+  const beside=page.locator('#reading-beside');
+  await page.locator('.reading-list button').filter({hasText:/^Project brief$/}).click();await beside.selectOption({label:'Research plan'});
+  await page.locator('[data-reading=edit]').click();
+  await page.locator('#reading-editor textarea').fill('Unsaved local reading draft');
+  await page.reload();await page.locator('.reading-page').first().waitFor();
+  assert.deepEqual(await page.locator('.reading-page h1').allTextContents(),['Project brief','Research plan']);
+  await page.locator('[data-reading=edit]').click();
+  assert.equal(await page.locator('#reading-editor textarea').inputValue(),'Unsaved local reading draft');
+  await page.keyboard.press('Escape');
+  await page.locator('[data-command=spaces]').click();
+  await page.locator('#new-space [name=name]').fill('Separate reading project');
+  await page.locator('#new-space button').click();await page.locator('.reading-empty').waitFor();
+  await page.locator('[data-command=spaces]').click();
+  await page.locator('[data-command=switch-space][data-key=home]').click();await page.locator('.reading-page').nth(1).waitFor();
+  assert.deepEqual(await page.locator('.reading-page h1').allTextContents(),['Project brief','Research plan']);
+  await page.locator('.reading-bar [data-reading=map]').click();
+  await page.locator('[data-reading=home]').click();await page.locator('.reading-page').first().waitFor();
+  assert.equal(await page.locator('.reading-page h1').first().textContent(),'Project brief');
+ });
+ await page.locator('.reading-bar [data-reading=map]').click();
  await page.waitForSelector('.knowledge-node');
  if(process.env.AGENETIC_GRAPH_BENCHMARK==='1'){
   const metrics=await page.evaluate(async()=>{
@@ -105,7 +126,7 @@ try{
   await layout('atlas');
   assert.ok(await page.evaluate(q=>network.orientation.every((v,i)=>Math.abs(v-q[i])<1e-10),angle));
   assert.deepEqual(await page.locator('.knowledge-node').evaluateAll(nodes=>nodes.map(n=>n.dataset.knowledgeNode).sort()),ids);
-  await page.reload();await page.locator('.network-stage[data-layout=atlas]').waitFor();
+  await page.reload();await page.locator('.reading-bar [data-reading=map]').click();await page.locator('.network-stage[data-layout=atlas]').waitFor();
   assert.ok(await page.evaluate(q=>network.orientation.every((v,i)=>Math.abs(v-q[i])<1e-10),angle));
   assert.equal(await page.evaluate(()=>JSON.stringify(activeSpace().graphPositions)),manual);
   await page.evaluate(()=>{appearance().theme='porcelain';render()});
@@ -180,7 +201,7 @@ try{
   await page.mouse.down();await page.mouse.move(hit.x+28,hit.y-16,{steps:3});await page.mouse.up();
   assert.equal(await page.evaluate(()=>network.pull),null);
   await page.emulateMedia({reducedMotion:'no-preference'});
-  await page.reload();await page.locator('.network-stage[data-layout=spatial]').waitFor();
+  await page.reload();await page.locator('.reading-bar [data-reading=map]').click();await page.locator('.network-stage[data-layout=spatial]').waitFor();
   const restored=await snapshot();
   assert.ok(restored.q.every((v,i)=>Math.abs(v-start.q[i])<1e-10));
   await page.locator('.graph-layouts [data-key=atlas]').click();await page.locator('.network-stage[data-layout=atlas]').waitFor();
@@ -204,7 +225,7 @@ try{
   await page.locator('.knowledge-file-list [data-network=open][data-key="'+target+'"]').click();
   await page.locator('[data-network=orbit-root]').click();
   await page.waitForFunction(id=>network.orbit.root===id,target);
-  await page.reload();await page.locator('.network-stage[data-layout=orbit]').waitFor();
+  await page.reload();await page.locator('.reading-bar [data-reading=map]').click();await page.locator('.network-stage[data-layout=orbit]').waitFor();
   assert.equal(await page.locator('.orbit-center').getAttribute('data-knowledge-node'),target);
   await page.setViewportSize({width:390,height:844});
   for(const name of ['signal','spatial','clusters','orbit','flow','freeform','atlas']){
@@ -232,7 +253,7 @@ try{
    await pane.locator('[data-invest=restore]').waitFor();
    await pane.locator('[data-invest=close]').click();
    assert.equal(await page.locator('#knowledge-query').inputValue(),'Project brief');
-   await page.reload();await entry.click();await pane.locator('summary').click();
+   await page.reload();await page.locator('.reading-bar [data-reading=map]').click();await entry.click();await pane.locator('summary').click();
    await pane.locator('[data-invest=restore]').click();assert.equal(await page.locator('#invest-to').inputValue(),to);
    await page.evaluate(async id=>{(activeSpace().hidden??=[]).push(id);await save();render();},to);
    assert.match(await pane.innerText(),/endpoint is unavailable/);
@@ -533,7 +554,7 @@ try{
    await next.click();await next.click();assert.match(await wizard.locator('#setup-error').textContent(),/backups/);
    await wizard.locator('#setup-storage').check();await next.click();await next.click();
    await wizard.locator('#setup-privacy').check();await next.click();
-   await wizard.waitFor({state:'detached'});await fresh.reload();await fresh.waitForSelector('.knowledge-node');
+   await wizard.waitFor({state:'detached'});await fresh.reload();await fresh.waitForSelector('.reading-page');
    assert.equal(await fresh.locator('.setup-wizard').count(),0);
    assert.equal(await fresh.evaluate(()=>profileIdentity().name),'River');
    assert.equal(await fresh.evaluate(()=>appearance().theme),'graphite');
@@ -598,7 +619,7 @@ try{
  await check('collapsed sections survive render and reload',async()=>{
   await page.locator('[data-explorer-kind="agent"] summary').click();
   await page.waitForFunction(()=>activeSpace().explorerClosed?.includes('agent'));
-  await page.evaluate(()=>save());await page.reload();await page.waitForSelector('.knowledge-node');
+  await page.evaluate(()=>save());await page.reload();await page.locator('.reading-bar [data-reading=map]').click();await page.waitForSelector('.knowledge-node');
   assert.equal(await page.locator('[data-explorer-kind="agent"]').getAttribute('open'),null);
  });
  await check('companion closes and stays closed',async()=>{
@@ -649,7 +670,7 @@ try{
   });
   assert.equal(await page.evaluate(()=>deskState().jobs.at(-1).status),'needs_review');
   assert.ok(await page.evaluate(()=>data.files.some(f=>f.research?.journalJob===window.auditJobId)));
-  await page.reload();await page.waitForSelector('.knowledge-node');
+  await page.reload();await page.locator('.reading-bar [data-reading=map]').click();await page.waitForSelector('.knowledge-node');
   await page.evaluate(async()=>{await bootDesk();page='Research';render();});
   assert.equal(await page.evaluate(()=>deskState().enabled),false);
   assert.match(await page.locator('#desk-live').innerText(),/needs review/);

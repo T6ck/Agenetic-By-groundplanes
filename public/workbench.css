@@ -448,3 +448,45 @@ html body .network-stage[data-layout=signal] .graph-layouts button {border-radiu
 
 html body .network-stage[data-layout=signal] .knowledge-svg:not(.has-node-highlight) .knowledge-edge {opacity:.48}
 html body .network-stage[data-layout=signal] .knowledge-svg[data-labels=auto] .landmark text {font-weight:650}
+.reading-workspace {position:fixed;inset:0;z-index:8;background:var(--ax-bg);color:var(--ax-ink);display:grid;grid-template-rows:auto minmax(0,1fr);padding:16px clamp(12px,2vw,32px) 20px;gap:18px;font-family:var(--font-sans)}
+.reading-workspace button,.reading-workspace select {font:inherit;color:var(--ax-ink);background:var(--ax-panel);border:1px solid var(--ax-line);border-radius:20px;padding:7px 13px;cursor:pointer}
+.reading-bar {display:flex;align-items:center;gap:14px;border-radius:32px;border:1px solid var(--ax-line);background:var(--ax-panel);padding:9px 16px}
+.reading-bar b {display:flex;align-items:center;gap:8px;font-size:20px;letter-spacing:-.045em}
+.reading-bar svg {width:23px;height:23px}
+.reading-bar nav {margin-left:auto;display:flex;gap:6px}
+.reading-layout {display:grid;grid-template-columns:clamp(190px,20%,270px) minmax(0,1fr);min-height:0;gap:24px}
+.reading-library,.reading-desk,.reading-page {min-height:0;min-width:0}
+.reading-library {display:flex;flex-direction:column;gap:12px;border-right:1px solid var(--ax-line);padding-right:18px}
+.reading-library header,.reading-page header,.reading-toolbar,.reading-actions {display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.reading-library h2 {font:normal 25px Georgia,serif;margin:0 auto 0 0}
+.reading-library input {background:var(--ax-panel);color:var(--ax-ink);border:1px solid var(--ax-line);padding:10px;border-radius:10px}
+.reading-list {display:grid;align-content:start;overflow:auto;flex:1}
+.reading-list button {border:0;background:none;text-align:left;border-radius:7px;overflow-wrap:anywhere}
+.reading-list [aria-current=true] {background:var(--ax-raised);color:var(--ax-accent);font-weight:600}
+.reading-desk {display:grid;grid-template-rows:auto minmax(0,1fr);gap:12px}
+.reading-toolbar label {font-size:12px;color:var(--ax-muted)}
+.reading-toolbar select {max-width:180px}
+.reading-toolbar label:first-child {display:none}
+.reading-toolbar>button {margin-left:auto}
+.reading-pages {display:grid;grid-template-columns:minmax(0,1fr);min-height:0;background:var(--ax-panel);border:1px solid var(--ax-line);border-radius:16px;overflow:hidden}
+.reading-pages[data-split=true] {grid-template-columns:repeat(2,minmax(0,1fr))}
+.reading-page,.reading-empty {overflow:auto;padding:clamp(20px,3.2vw,58px)}
+.reading-page+.reading-page {border-left:1px solid var(--ax-line)}
+.reading-page header {justify-content:space-between}
+.reading-page header small,.reading-meta {color:var(--ax-muted);font:12px var(--font-mono,monospace)}
+.reading-page h1,.reading-empty h1 {font:normal clamp(30px,3.2vw,58px)/1.1 Georgia,serif;letter-spacing:-.04em;margin:32px 0 12px;overflow-wrap:anywhere}
+.reading-text {white-space:pre-wrap;font:18px/1.75 Georgia,serif;max-width:68ch;overflow-wrap:anywhere;margin:28px 0 40px}
+.reading-text button.reader-reference {padding:0;border:0;border-radius:0;background:none;border-bottom:1px solid var(--ax-accent);color:var(--ax-accent);font:inherit}
+@media(max-width:760px){.reading-workspace{padding:8px;gap:9px}.reading-layout{display:block}.reading-desk{height:100%}.reading-library{display:none}.reading-toolbar label:first-child{display:block}.reading-toolbar select{max-width:130px}.reading-bar{gap:4px;flex-wrap:wrap}.reading-bar button,.reading-toolbar button,.reading-toolbar select{padding:5px 8px;font-size:12px}.reading-bar b{font-size:16px}.reading-bar nav{gap:2px}.reading-pages[data-split=true]{grid-template-columns:1fr;grid-template-rows:1fr 1fr}.reading-page+.reading-page{border-left:0;border-top:1px solid var(--ax-line)}.reading-page h1{margin-top:14px}.reading-text{margin:16px 0;font-size:16px}}
+
+.reading-related {border-top:1px solid var(--ax-line);margin-top:28px;padding-top:14px}
+.reading-related h2 {font:500 13px var(--font-sans);color:var(--ax-muted)}
+.reading-related button {margin:0 6px 6px 0;font-size:12px}
+html body .reading-list button {justify-content:flex-start;text-align:left}
+html body .reading-page h1 {font:normal clamp(30px,3vw,50px)/1.12 Georgia,serif}
+.graph-view-tools [data-reading=home] {pointer-events:auto;position:relative;border-radius:20px}
+.reading-table {white-space:normal;overflow:auto;max-width:100%}
+.reading-table table {width:100%;border-collapse:collapse;font:14px/1.6 var(--font-mono,monospace);font-variant-numeric:tabular-nums}
+.reading-table td,.reading-table th {padding:8px 6px;border-bottom:1px solid var(--ax-line);text-align:right}
+.reading-table td:first-child,.reading-table th:first-child {text-align:left}
+.reading-table th {font:600 12px var(--font-sans);color:var(--ax-muted)}

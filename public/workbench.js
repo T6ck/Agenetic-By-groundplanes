@@ -24,7 +24,7 @@ networkNode=function(n,links){
 };
 const workbenchCamera=applyNetworkCamera;
 applyNetworkCamera=function(){const svg=$('.knowledge-svg');if(svg)svg.dataset.detail=network.camera.scale>=.8?'full':'compact';workbenchCamera();};
-function readerPassageHtml(file) {
+function readerPassageHtml(file,workspace=false) {
  if(productionRole(file.name)==='Captions'){
   const cues=captionCues(file.text);
   if(cues.length)return '<ol class="caption-sheet">'+cues.map(c=>'<li><time>'+esc(c.start)+'</time><span>'+esc(c.dialogue)+'</span></li>').join('')+'</ol>';
@@ -39,7 +39,7 @@ function readerPassageHtml(file) {
  for(const match of file.text.matchAll(/\[\[([^\]\n]+)\]\]/g)){
   const [ref,alias]=match[1].split('|'),id=notes.get(fileNameKey(ref.split('#')[0]));
   if(!id||id===file.id)continue;
-  html+=esc(file.text.slice(offset,match.index))+studioButton('focus',esc(alias||ref),id,'class="reader-reference"');
+  html+=esc(file.text.slice(offset,match.index))+(workspace?'<button class="reader-reference" data-reading="open" data-id="'+esc(id)+'">'+esc(alias||ref)+'</button>':studioButton('focus',esc(alias||ref),id,'class="reader-reference"'));
   offset=match.index+match[0].length;
  }
  return html+esc(file.text.slice(offset));

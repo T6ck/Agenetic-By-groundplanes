@@ -30,6 +30,38 @@ try{
     catch{return route.fulfill({status:404,body:''});}
   });
   await page.goto('http://127.0.0.1/');
+  if(wants('source-workspace')){
+    await page.locator('[data-command=spaces]').click();
+    await page.locator('#new-space [name=name]').fill('Pier exchange');
+    await page.locator('#new-space [name=starter]').selectOption('network');
+    await page.locator('#new-space button').click();
+    await page.locator('.reading-page h1').filter({hasText:'Change window'}).waitFor();
+    const picker=page.waitForEvent('filechooser');
+    await page.locator('.reading-bar [data-reading=import]').click();
+    await (await picker).setFiles([
+      {name:'Evening handoff.md',mimeType:'text/plain',buffer:Buffer.from('Pier exchange · Evening shift\n\nWest-side subscribers reported short bursts of loss just after 19:00. Replication had started four minutes earlier on the same uplink.\n\nThe first egress drops appeared at 19:04. Input errors stayed flat while the queue filled. Compare that minute with the preceding samples.\n\nNext shift\nRepeat the measurements after moving the replication window. Keep the interface, sample interval and subscriber paths the same.')},
+      {name:'Uplink counters.csv',mimeType:'text/csv',buffer:Buffer.from('Time,Queue %,TX drops,RX errors\n19:00,26,0,0\n19:01,31,0,0\n19:02,33,0,0\n19:03,38,0,0\n19:04,94,182,0\n19:05,97,261,0\n19:06,89,138,0\n19:07,61,25,0')}
+    ]);
+    await page.locator('#reading-beside').selectOption({label:'Uplink counters.csv'});
+    await page.waitForFunction(()=>document.querySelectorAll('.reading-page').length===2);
+    await page.evaluate(()=>document.fonts.ready);
+    const capture=await (await page.context().newCDPSession(page)).send('Page.captureScreenshot',{format:'webp',quality:90});
+    await writeFile(resolve(output,'source-workspace.webp'),Buffer.from(capture.data,'base64'));
+    assert.equal(await page.locator('.reading-table tbody tr').count(),8);
+    await page.locator('[data-reading=finding]').click();
+    await page.locator('#reading-note [name=name]').fill('First egress drops');
+    await page.locator('#reading-note textarea').fill('The first drops were recorded at 19:04.');
+    await page.locator('#reading-note button').click();
+    await page.waitForFunction(()=>document.querySelector('.reading-page h1')?.textContent==='First egress drops');
+    assert.equal(await page.locator('.reading-page').first().locator('.reading-related button').count(),2);
+    await page.setViewportSize({width:390,height:844});
+    assert.ok(await page.locator('#reading-primary').isVisible());
+    await page.setViewportSize({width:1440,height:1000});
+    await page.locator('[data-command=spaces]').click();
+    await page.locator('[data-command=switch-space][data-key=home]').click();
+    await page.locator('.reading-page h1').filter({hasText:'Start here'}).waitFor();
+  }
+  await page.locator('.reading-bar [data-reading=map]').click();
   await page.locator('.knowledge-node').first().waitFor();
   assert.equal(await page.evaluate(()=>data.profile.demo),true);
   const cdp=await page.context().newCDPSession(page);
@@ -156,7 +188,7 @@ try{
     await form.locator('[name=name]').fill('North Pier / Picture lock');
     await form.locator('[name=starter]').selectOption('edit');
     await form.locator('button').click();
-    await layout('flow');await theme('linen');
+    await page.locator('.reading-bar [data-reading=map]').click();await layout('flow');await theme('linen');
     assert.equal(await page.locator('.knowledge-node').count(),7);
     if(wants('cut-room')){
       const picker=page.waitForEvent('filechooser');
@@ -185,7 +217,7 @@ try{
       await page.locator('[data-package-install]').click();
       await page.locator('[data-confirm]').click();
       await page.waitForFunction(()=>appearance().theme==='community'&&theme().name==='North Pier');
-      await page.reload();
+      await page.reload();await page.locator('.reading-bar [data-reading=map]').click();
       await page.waitForFunction(()=>document.querySelector('.knowledge-node')&&theme().name==='North Pier');
     }
   }

@@ -322,7 +322,7 @@ function renderNetwork() {
   const investigateEntry=investigationButton('open','Investigate','','class="invest-entry" aria-controls="investigation-pane" aria-expanded="'+!!(investigation&&(innerWidth>760||investigation.sheet))+'"');
   const angles=[['left','Turn left'],['right','Turn right'],['up','Tilt up'],['down','Tilt down'],['ccw','Roll left'],['cw','Roll right'],['reset','Reset angle']];
   const viewControl=spatialLayout(layout)&&nodes.length?'<select class="graph-angle" aria-label="3D view angle" title="Choose an angle, or Alt-drag to roll"><option selected disabled>View angle</option>'+angles.map(([key,label])=>'<option value="'+key+'">'+label+'</option>').join('')+'</select>':'';
-  const layoutTools='<div class="graph-view-tools">'+layoutSwitch+viewControl+investigateEntry+'</div>';
+  const layoutTools='<div class="graph-view-tools"><button data-reading="home">Back to files</button>'+layoutSwitch+viewControl+investigateEntry+'</div>';
   const selected=!investigation&&studioNodes().find(n=>n.id===network.focus);
   $('#content').innerHTML='<header class="knowledge-header"><div class="knowledge-brand">'+brandMark()+'<div class="brand-family"><strong>Agenetic</strong><small>by Groundplanes</small></div></div><button data-command="spaces" class="knowledge-space">'+esc(space.name)+lineIcon('chevron')+'</button><div class="view-switch" aria-label="Workspace view">'+networkButton('graph',lineIcon('graph')+'Graph','','class="active" aria-pressed="true"')+networkButton('canvas',lineIcon('canvas')+'Canvas','','aria-pressed="false"')+'</div><div class="knowledge-header-actions"><span class="private-label">'+(space.id===data.exampleSpaceId?'Example data':'Local workspace')+'</span>'+networkButton('appearance',lineIcon('palette')+'Appearance','','aria-label="Appearance"')+''+networkButton('filters',lineIcon('settings'),'','aria-label="Graph settings" aria-expanded="'+network.settings+'"')+studioButton('share',lineIcon('download')+'Export','','aria-label="Export workflow"')+'</div></header>'+
   '<aside id="graph-explorer" class="knowledge-explorer" aria-label="Graph explorer"><div class="explorer-title"><span>EXPLORER</span>'+studioButton('note',lineIcon('plus'),'','aria-label="New note"')+'</div><label class="knowledge-search">'+lineIcon('search')+'<input id="knowledge-query" type="search" value="'+esc(network.search)+'" placeholder="Search this space" aria-label="Search this space"></label><div class="space-navigation">'+networkButton('all',lineIcon('graph')+'All connections','','class="'+(!network.focus?'current':'')+'"')+'</div><div class="knowledge-file-list">'+['file','agent','task','model'].map(kind=>{
@@ -620,6 +620,7 @@ async function openNetworkNode(id,goingBack=false) {
   else if(!goingBack&&previous!==id)network.trail=[...network.trail.slice(-31),previous];
   if(goingBack)network.trail.pop();
   studio.selected=new Set([id]);studio.inspector=true;network.settings=false;
+  if(node.kind==='file'){const state=activeSpace().reading??={};state.primary=id;if(state.beside===id)state.beside='';await save();}
   const graph=$('.knowledge-svg');
   if(graph&&!indexedGraph(graph).nodes.has(id)){
     network.types.add(node.kind);

@@ -370,7 +370,7 @@ async function studioCommand(action,id) {
   if(action==='close-library'){studio.library=false;render();return}
   if(action==='close-inspector'){studio.inspector=false;studio.selected.clear();render();return}
   if(action==='spaces')return showSpaces();
-  if(action==='switch-space'){data.activeSpace=id;studio.selected.clear();studio.inspector=false;studio.view=activeSpace().camera||{x:0,y:0,scale:.85};$('#dialog').close();await save();render();return}
+  if(action==='switch-space'){page='Workspace';data.activeSpace=id;studio.selected.clear();studio.inspector=false;studio.view=activeSpace().camera||{x:0,y:0,scale:.85};$('#dialog').close();await save();render();return}
   if(action==='focus'){
     if(!spaceNodes().some(n=>n.id===id))await commitStudio(()=>{activeSpace().hidden=(activeSpace().hidden||[]).filter(n=>n!==id);activeSpace().members.push(id);activeSpace().positions[id]=centerPoint()});
     studio.selected=new Set([id]);studio.inspector=true;const [x,y]=nodePosition(id),bounds=$('.space-stage').getBoundingClientRect();
@@ -417,7 +417,7 @@ document.addEventListener('submit',async e=>{
   if(e.target.id==='new-space'){
     e.preventDefault();const name=new FormData(e.target).get('name').trim();if(!name)return;
     const starter=new FormData(e.target).get('starter');
-    const created=await commitStudio(()=>{const id=crypto.randomUUID(),space={id,name,members:[],positions:{},groups:[]};data.spaces.push(space);populateProject(space,starter);data.activeSpace=id;studio.selected.clear();studio.inspector=false;studio.view={x:0,y:0,scale:1}});if(created)$('#dialog').close();return;
+    const created=await commitStudio(()=>{const id=crypto.randomUUID(),space={id,name,members:[],positions:{},groups:[]};data.spaces.push(space);populateProject(space,starter);page='Workspace';data.activeSpace=id;studio.selected.clear();studio.inspector=false;studio.view={x:0,y:0,scale:1}});if(created)$('#dialog').close();return;
   }
   if(e.target.id==='new-group'){
     e.preventDefault();const name=new FormData(e.target).get('name').trim();if(!name)return;

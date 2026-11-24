@@ -2,7 +2,9 @@
 
 ## Unreleased
 
-- New workspaces open in Signal field. Rotate the strands, pull linked records, or open a source directly from the graph.
+- Projects reopen at their files. Read two sources side by side, save a linked finding, or open Map to inspect connections.
+
+- Signal field groups connected records in the map. Rotate the strands, pull linked records, or open a source directly from the graph.
 
 - Atlas draws a contour map from connected records. Graph and screen changes respect reduced motion.
 - Added Video edit, 3D production, and Model evaluation workspaces with linked notes and tasks. Import captions, edit lists, OBJ meshes, glTF manifests, notebooks, and JSONL datasets.

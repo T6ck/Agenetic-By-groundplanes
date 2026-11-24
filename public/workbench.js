@@ -94,8 +94,10 @@ render=function(){
  const heading=stage?.querySelector('.network-context')||content.querySelector('h1');
  const timing={duration:280,easing:'cubic-bezier(.18,.76,.25,1)'};
  surface?.animate?.([{opacity:.22,translate:'0 8px'},{opacity:1,translate:'0 0'}],timing);
- const guides=stage?.querySelector('.atlas-surface,.flow-columns,.cluster-guides,.orbit-guides');
- guides?.animate?.([{opacity:0},{opacity:1}],{...timing,duration:360});
+ const guides=stage?.querySelector('.signal-field,.atlas-surface,.flow-columns,.cluster-guides,.orbit-guides');
+ if(guides?.classList.contains('signal-field')){
+  guides.animate([{clipPath:'inset(0 100% 0 0) fill-box',opacity:.15},{clipPath:'inset(0 0% 0 0) fill-box',opacity:.67}],{...timing,duration:520});
+ }else guides?.animate?.([{opacity:0},{opacity:1}],{...timing,duration:360});
  stage?.querySelector('.network-nodes')?.animate?.([{opacity:0},{opacity:1}],{...timing,delay:60,fill:'backwards'});
  heading?.animate?.([{opacity:.12,translate:'-8px 0'},{opacity:1,translate:'0 0'}],{...timing,duration:220});
 };

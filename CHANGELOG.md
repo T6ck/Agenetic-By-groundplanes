@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- New workspaces open in Signal field. Rotate the strands, pull linked records, or open a source directly from the graph.
+
 - Atlas draws a contour map from connected records. Graph and screen changes respect reduced motion.
 - Added Video edit, 3D production, and Model evaluation workspaces with linked notes and tasks. Import captions, edit lists, OBJ meshes, glTF manifests, notebooks, and JSONL datasets.
 - Added Plotter and Blueprint palettes and a palette editor. Export your colors and display settings from Appearance.

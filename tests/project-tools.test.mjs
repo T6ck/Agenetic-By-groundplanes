@@ -13,7 +13,7 @@ function project(){
 }
 test('each production starter links only its own notes and tasks',()=>{
  const env=project();
- for(const [key,layout] of Object.entries({edit:'flow',scene:'atlas',model:'clusters'})){
+ for(const [key,layout] of Object.entries({network:'signal',edit:'flow',scene:'atlas',model:'clusters'})){
   const space={members:[]},first=env.data.links.length;
   env.populateProject(space,key);
   assert.equal(space.graphLayout,layout);
@@ -21,7 +21,7 @@ test('each production starter links only its own notes and tasks',()=>{
   assert.ok(env.data.links.length-first>=6);
   for(const edge of env.data.links.slice(first))assert.ok(space.members.includes(edge.from)&&space.members.includes(edge.to));
  }
- assert.equal(new Set(env.data.files.map(f=>f.id)).size,12);
+ assert.equal(new Set(env.data.files.map(f=>f.id)).size,16);
 });
 test('caption reader preserves timecodes and multiline dialogue',()=>{
  const env=project(),cues=env.captionCues('WEBVTT\r\n\r\nboat\r\n00:01.150 --> 00:02.600 align:start\r\nFirst line\r\nSecond line');

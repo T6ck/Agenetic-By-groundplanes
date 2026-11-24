@@ -11,11 +11,11 @@
 <a href="https://groundplanes.com"><img alt="Website" src="https://img.shields.io/badge/groundplanes.com-site-2b2f36"></a>
 </p>
 
-Agenetic is a local Windows workspace for connected project files. Trace a research claim to its source, read timed captions beside an edit brief, inspect a scene manifest, or connect a model evaluation to its dataset and run notes. Use **Workspaces → New workspace** to start a video edit, 3D production, or model evaluation.
+Agenetic is a local Windows workspace for connected project files. Trace a research claim to its source, read timed captions beside an edit brief, inspect a scene manifest, or connect a model evaluation to its dataset and run notes. Use **Workspaces → New workspace** to start a network investigation, video edit, 3D production, or model evaluation.
 
 [Download the Windows x64 beta](https://github.com/T6ck/AgeneticByGroundplanes/releases) · [Release notes](CHANGELOG.md) · [Groundplanes](https://groundplanes.com)
 
-![The Fieldwork workspace in Agenetic’s Atlas graph](docs/screenshots/gallery/atlas.webp)
+![The Fieldwork sources grouped into strands in Signal field](docs/screenshots/gallery/signal-field.webp)
 
 ## Getting started
 
@@ -27,11 +27,13 @@ Open **Navigate → Releases → Check for updates** to see your installed versi
 
 ## Turning and pulling the graph
 
+**Signal field** groups connected records into strands. Open a record to read its source or follow a saved connection.
+
 In **Atlas** and **Spatial**, drag the background to rotate the graph. Drag a record to pull its neighbors, then release it to let them settle. Shift-drag pans, the wheel zooms, and **View angle** lets you tilt, roll, or reset.
 
 **Clusters** groups related records. **Orbit** shows how many links separate each record from a starting point. **Flow** lays out sources, agents, models, and tasks in columns. **Freeform** keeps records where you put them.
 
-[See all six layouts and the research screens](docs/screenshots/README.md) · [Work through a research project](docs/research-desk.md)
+[See the graph layouts and the research screens](docs/screenshots/README.md) · [Work through a research project](docs/research-desk.md)
 
 ## Community
 

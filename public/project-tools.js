@@ -3,6 +3,12 @@
 // Starter records are ordinary notes and tasks. The same editor, links,
 // import controls, exports, and undo history work in every kind of project.
 const projectStarters={
+ network:{name:'Network investigation',layout:'signal',notes:[
+  ['Change window','Record the circuit, interface, timezone, and recent changes. Attach the original change record.'],
+  ['Interface counters','Import the counter export. Mark the first rise in egress drops, queue depth, and input errors.'],
+  ['Subscriber probes','Record the affected paths, observation window, baseline latency, and loss.'],
+  ['Verification window','Capture the same counters and probes after the change. Keep the comparison window and traffic conditions together.']],
+  tasks:[['Locate the loss window','Align counter timestamps with subscriber probes.',[1,2]],['Review the change','Compare the change window with the first affected interval.',[0,1]],['Verify recovery','Compare the follow-up observations with the original paths.',[2,3]]]},
  edit:{name:'Video edit',layout:'flow',notes:[
   ['Cut brief','What should the audience take away? Record the delivery format, target duration, and review date.'],
   ['Selects log','Log each take with its source filename, in and out timecodes, and the reason to keep it. Import SRT or VTT captions to read the timed dialogue beside this log.'],

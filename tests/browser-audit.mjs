@@ -74,7 +74,7 @@ try{
     await page.locator('.graph-layouts [data-key="'+key+'"]').click();
     await page.locator('.network-stage[data-layout="'+key+'"]').waitFor();
   };
-  await page.locator('.network-stage[data-layout=atlas]').waitFor();
+  await layout('atlas');
   const ids=await page.locator('.knowledge-node').evaluateAll(nodes=>nodes.map(n=>n.dataset.knowledgeNode).sort());
   const count=await page.locator('.knowledge-edge').count();
   const first=page.locator('.knowledge-node').first(),before=await first.getAttribute('transform');
@@ -185,13 +185,13 @@ try{
   assert.ok(restored.q.every((v,i)=>Math.abs(v-start.q[i])<1e-10));
   await page.locator('.graph-layouts [data-key=atlas]').click();await page.locator('.network-stage[data-layout=atlas]').waitFor();
  });
- await check('all six graph designs keep the same records, investigation and keyboard targets, and Orbit remembers its center',async()=>{
+ await check('all seven graph designs keep the same records, investigation and keyboard targets, and Orbit remembers its center',async()=>{
   const layouts=page.locator('.graph-layouts button'),pane=page.locator('#investigation-pane');
-  assert.equal(await layouts.count(),6);
+  assert.equal(await layouts.count(),7);
   await page.locator('.invest-entry').click();
   const ids=async()=>page.locator('.knowledge-node').evaluateAll(ns=>ns.map(n=>n.dataset.knowledgeNode).sort());
   const original=await ids(),edges=await page.locator('.knowledge-edge').count();
-  for(const name of ['spatial','clusters','orbit','flow','freeform','atlas']){
+  for(const name of ['signal','spatial','clusters','orbit','flow','freeform','atlas']){
     await page.locator('.graph-layouts [data-key='+name+']').click();
     await page.locator('.network-stage[data-layout='+name+']').waitFor();
     assert.deepEqual(await ids(),original);assert.equal(await page.locator('.knowledge-edge').count(),edges);
@@ -207,7 +207,7 @@ try{
   await page.reload();await page.locator('.network-stage[data-layout=orbit]').waitFor();
   assert.equal(await page.locator('.orbit-center').getAttribute('data-knowledge-node'),target);
   await page.setViewportSize({width:390,height:844});
-  for(const name of ['spatial','clusters','orbit','flow','freeform','atlas']){
+  for(const name of ['signal','spatial','clusters','orbit','flow','freeform','atlas']){
     const control=page.locator('.graph-layouts [data-key='+name+']');await control.click();
     await page.locator('.network-stage[data-layout='+name+']').waitFor();
     const box=await control.boundingBox();assert.ok(box.x>=0&&box.x+box.width<=391);

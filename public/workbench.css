@@ -348,9 +348,9 @@ html body .network-stage[data-layout=atlas] .node-state-label { display: none; }
 html[data-motion=false] .spatial-signals { display: none; }
 html body .atlas-record:is(.graph-neighbor,:focus-visible,.selected) .depth-glyph { opacity: 1; }
 .graph-layouts { flex-wrap: wrap; max-width: 100%; }
-.network-stage:is([data-layout=atlas],[data-layout=spatial]) .knowledge-svg { touch-action: none; }
+.network-stage:is([data-layout=signal],[data-layout=atlas],[data-layout=spatial]) .knowledge-svg { touch-action: none; }
 html body .network-stage[data-layout=spatial] .node-state-label { display: none; }
-html body .network-stage:is([data-layout=atlas],[data-layout=spatial]) .knowledge-edge[data-source-kind] {
+html body .network-stage:is([data-layout=signal],[data-layout=atlas],[data-layout=spatial]) .knowledge-edge[data-source-kind] {
   --edge-color: var(--node-file);
   stroke: color-mix(in srgb,var(--edge-color) 78%,var(--ax-ink)) !important;
   stroke-opacity: var(--link-depth);
@@ -359,7 +359,7 @@ html body .network-stage:is([data-layout=atlas],[data-layout=spatial]) .knowledg
 html body .knowledge-edge[data-source-kind=agent] { --edge-color: var(--node-agent) !important; }
 html body .knowledge-edge[data-source-kind=task] { --edge-color: var(--node-task) !important; }
 html body .knowledge-edge[data-source-kind=model] { --edge-color: var(--node-model) !important; }
-html body .network-stage:is([data-layout=atlas],[data-layout=spatial]) .knowledge-svg.has-node-highlight .knowledge-edge.related {
+html body .network-stage:is([data-layout=signal],[data-layout=atlas],[data-layout=spatial]) .knowledge-svg.has-node-highlight .knowledge-edge.related {
   stroke: var(--edge-color) !important;
   stroke-opacity: 1;
   stroke-width: 2.6px;
@@ -434,3 +434,17 @@ html[data-node-style=compact] .atlas-record .spatial-solid { display:none }
 .caption-sheet li { border-top:1px solid var(--ax-line);padding:10px 0;display:grid;gap:3px; }
 .caption-sheet time { color:var(--ax-muted);font:12px var(--font-mono,monospace); }
 .caption-sheet span { white-space:pre-wrap; }
+
+.signal-field { fill:none;pointer-events:none;stroke-linecap:round;stroke-width:1.05;opacity:.67 }
+.signal-field .band-0 {stroke:var(--node-file)}
+.signal-field .band-1 {stroke:var(--node-agent)}
+.signal-field .band-2 {stroke:var(--node-task)}
+.signal-field .band-3 {stroke:var(--node-model)}
+.knowledge-svg.has-node-highlight .signal-field {opacity:.30}
+.network-stage[data-layout=signal] .node-state-label {display:none}
+html body .network-stage[data-layout=signal] {background:radial-gradient(ellipse at 57% 46%,color-mix(in srgb,var(--node-file) 7%,var(--ax-bg)),var(--ax-bg) 72%)!important}
+html body .network-stage[data-layout=signal] .graph-layouts {border-radius:24px;background:color-mix(in srgb,var(--ax-panel) 83%,transparent);backdrop-filter:blur(14px);box-shadow:inset 0 1px 1px color-mix(in srgb,var(--ax-ink) 12%,transparent)}
+html body .network-stage[data-layout=signal] .graph-layouts button {border-radius:18px}
+
+html body .network-stage[data-layout=signal] .knowledge-svg:not(.has-node-highlight) .knowledge-edge {opacity:.48}
+html body .network-stage[data-layout=signal] .knowledge-svg[data-labels=auto] .landmark text {font-weight:650}

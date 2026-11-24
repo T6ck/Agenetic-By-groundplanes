@@ -64,6 +64,7 @@ try{
   }
   async function theme(name){await page.evaluate(value=>{appearance().theme=value;render();},name);await settle();}
   await theme('porcelain');
+  if(wants('signal-field')){await theme('linen');await layout('signal');await screenshot('signal-field');}
   if(wants('atlas')||wants('atlas-graphite')){
     await theme('linen');await layout('atlas');
     if(wants('atlas'))await screenshot('atlas');

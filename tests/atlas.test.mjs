@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 const source=readFileSync('public/graph-atlas.js','utf8');
 const api=runInNewContext(source+'\n({atlasCloud,homeOrientation,savedOrientation,composeRotation,axisRotation,viewMatrix,projectPoint,spatialCloud,flowArrangement,orbitArrangement,clusterArrangement,workspaceGraphLayout,graphCameraKey})');
 test('new spaces open in Atlas and existing manual layouts keep their workspace camera',()=>{
-  assert.equal(api.workspaceGraphLayout({}), 'atlas');
+  assert.equal(api.workspaceGraphLayout({}), 'signal');
   assert.equal(api.workspaceGraphLayout({graphPositions:{a:[10,4]}}),'freeform');
   assert.equal(api.workspaceGraphLayout({graphCamera:{scale:.5,x:0,y:0}}),'freeform');
   assert.equal(api.workspaceGraphLayout({graphLayout:'flow',graphPositions:{a:[1,2]}}),'flow');

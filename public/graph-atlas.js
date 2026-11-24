@@ -2,8 +2,9 @@
 
 // The atlas surface supplies orientation. Only workspace records and saved links
 // participate in selection, counts, search, and traversal.
-const graphLayouts = {atlas:'Atlas',spatial:'Spatial',clusters:'Clusters',orbit:'Orbit',flow:'Flow',freeform:'Freeform'};
+const graphLayouts = {signal:'Signal field',atlas:'Atlas',spatial:'Spatial',clusters:'Clusters',orbit:'Orbit',flow:'Flow',freeform:'Freeform'};
 const graphLayoutHelp = {
+  signal:'Follow the strands to explore a group. Select a record to read its source.',
   atlas:'Each ridge groups connected records. Drag to turn the map.',
   spatial:'Drag the space to rotate. Pull a record to trace its neighbors.',
   clusters:'Follow links between groups of related records.',
@@ -14,7 +15,7 @@ const graphLayoutHelp = {
 const atlasHomeAngle = -.28;
 function workspaceGraphLayout(space) {
   if (Object.hasOwn(graphLayouts,space.graphLayout)) return space.graphLayout;
-  return Object.keys(space.graphPositions||{}).length || space.graphCamera ? 'freeform' : 'atlas';
+  return Object.keys(space.graphPositions||{}).length || space.graphCamera ? 'freeform' : 'signal';
 }
 function graphCameraKey(layout) {
   return layout==='freeform'||!Object.hasOwn(graphLayouts,layout)?'graphCamera':layout+'Camera';
@@ -29,7 +30,7 @@ function ridgePoint(ridge,r,angle) {
   return [x,y*.86-h*.53,h*.85+y*.5];
 }
 function spatialLayout(layout) {
-  return layout==='atlas'||layout==='spatial';
+  return layout==='signal'||layout==='atlas'||layout==='spatial';
 }
 // Unit quaternions keep rotations continuous through both poles. Compose each
 // gesture about the viewer's axes so dragging right always turns toward the right.
@@ -142,6 +143,44 @@ function atlasCloud(nodes,links) {
     if(a!==undefined&&b!==undefined&&a!==b){regions[a].boundary++;regions[b].boundary++;}
   }
   return {cloud,landmarks,regions,ridges};
+}
+// A strand is a guide for one group; the selectable edges remain saved relationships.
+function signalPoint(lane,t,phase,radius){
+  const fan=t*t*(3-2*t),wave=Math.sin(t*Math.PI);
+  const twist=phase+4.8*t+lane.index*.46;
+  const width=radius*(3+24*wave+9*t);
+  return [-330+660*t, lane.y*fan+Math.sin(t*6+lane.index*.35)*wave*32+Math.sin(twist)*width,
+    lane.z*fan+Math.sin(t*4)*44+Math.cos(twist)*width];
+}
+function signalField(regions){
+  const cloud=new Map(),lanes=[];
+  regions.forEach((region,index)=>{
+    const y=regions.length===1?0:(index/(regions.length-1)-.5)*375;
+    const lane={index,y,z:Math.sin(index*2.4)*82,loose:region.id==='isolated'};
+    lanes.push(lane);
+    region.ids.forEach((id,j)=>{
+      // The hub ends its strand. Stagger attachments along the approach.
+      const t=j===0?.97:.12+.78*(j-.5)/Math.max(1,region.ids.length-1);
+      cloud.set(id,signalPoint(lane,t,j*2.39996,j===0?0:.75));
+    });
+  });
+  return {lanes,cloud};
+}
+function signalPaths(lanes,matrix,coarse){
+  const bands=Array.from({length:4},()=>[]);
+  for(const lane of lanes.slice(0,32)){
+    if(lane.loose)continue;
+    const steps=coarse?12:44;
+    for(let j=0;j<28;j+=coarse?4:1){
+      const points=[];
+      for(let n=0;n<=steps;n++){
+        const p=projectPoint(signalPoint(lane,n/steps,j*.735,(.36+.64*(j*13%29)/29)),matrix);
+        points.push(p[0].toFixed(1)+' '+p[1].toFixed(1));
+      }
+      bands[lane.index%4].push('M'+points.join('L'));
+    }
+  }
+  return bands.map(paths=>paths.join(''));
 }
 function flowArrangement(nodes) {
   const positions=new Map(),columns=[];
@@ -353,6 +392,7 @@ function graphViewUnderlay(nodes) {
     return '<g class="flow-columns" aria-hidden="true">'+network.flowColumns.filter(c=>visible.has(c.kind)).map(c=>
       '<g class="flow-lane lane-'+c.kind+'"><path d="M'+(c.x-17)+' '+(c.y+12)+'h102 M'+(c.x-17)+' '+(c.y+12)+'v8"/><text x="'+(c.x-17)+'" y="'+c.y+'">'+esc(c.label)+'</text></g>').join('')+'</g>';
   }
+  if(network.layout==='signal')return spatialDefinitions()+'<g class="signal-field" aria-hidden="true">'+signalPaths(network.lanes,network.matrix,false).map((d,i)=>'<path class="signal-band band-'+i+'" d="'+d+'"/>').join('')+'</g>';
   if(network.layout==='spatial')return spatialDefinitions();
   if(network.layout!=='atlas')return '';
   const paths=atlasSurfacePaths(network.orientation,false,network.ridges);
@@ -380,7 +420,7 @@ function graphLinkMarkup(link) {
 function atlasNode(n,links) {
   const [x,y]=network.positions.get(n.id),degree=degreeFor(n.id,links);
   const spatial=spatialLayout(network.layout);
-  const radius=(4.3+Math.min(6,Math.sqrt(degree)*1.4))*network.nodeScale*(spatial?1.22:1);
+  const radius=(4.3+Math.min(6,Math.sqrt(degree)*1.4))*network.nodeScale*(network.layout==='signal'?.79:spatial?1.22:1);
   const shape={file:'M-.8 -1H.32L.86 -.45V1H-.8Z',agent:'M-.98 -.58L-.56 -.96H.98V.58L.56 .96H-.98Z',task:'M-.95 -.8H.4L1 0 .4 .8H-.95Z',model:'M-.5 -.9H.5L1 0 .5 .9H-.5L-1 0Z'};
   const name=n.name.replace(/\.md$/i,''),label=objectLabel(n);
   const landmark=!spatialLayout(network.layout)||network.landmarks.has(n.id);
@@ -400,6 +440,7 @@ function paintSpatialGraph(svg,duringGesture=false) {
   if(!graph.glyphs){
     graph.glyphs=new Map(Array.from(graph.nodes,([id,el])=>[id,{el,mark:el.querySelector('.depth-glyph')}]));
     graph.fibers=svg.querySelectorAll('.atlas-fiber');
+    graph.bands=svg.querySelectorAll('.signal-band');
     graph.solids=Object.entries(spatialMeshes).map(([kind,mesh])=>({mesh,faces:svg.querySelectorAll('#solid-'+kind+' path')}));
     graph.curves=new Map(graph.links.map(el=>{
       const {source,target}=el.dataset;
@@ -408,6 +449,9 @@ function paintSpatialGraph(svg,duringGesture=false) {
   }
   if(graph.orientation!==network.orientation){
     for(const {mesh,faces} of graph.solids)solidFaces(mesh,network.matrix).forEach((d,i)=>faces[i]?.setAttribute('d',d));
+  }
+  if(graph.bands.length&&(graph.orientation!==network.orientation||graph.rotating!==rotating)){
+    signalPaths(network.lanes,network.matrix,rotating).forEach((d,i)=>graph.bands[i].setAttribute('d',d));
   }
   if(graph.fibers.length&&(graph.orientation!==network.orientation||graph.rotating!==rotating)){
     atlasSurfacePaths(network.orientation,rotating,network.ridges).forEach((d,i)=>graph.fibers[i].setAttribute('d',d));

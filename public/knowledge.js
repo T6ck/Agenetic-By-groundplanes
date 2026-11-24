@@ -196,7 +196,9 @@ function calculateNetwork(force=false) {
   network.signature=signature;
   if(spatialLayout(network.layout)){
     const {cloud,landmarks,regions,ridges}=atlasCloud(nodes,links);
-    network.cloud=network.layout==='atlas'?cloud:spatialCloud(regions);
+    if(network.layout==='signal'){
+      const field=signalField(regions);network.cloud=field.cloud;network.lanes=field.lanes;
+    }else network.cloud=network.layout==='atlas'?cloud:spatialCloud(regions);
     network.landmarks=landmarks;network.regions=regions;network.ridges=ridges;network.kinds=new Map(nodes.map(n=>[n.id,n.kind]));
     updateProjection();
     return;
@@ -334,7 +336,7 @@ function renderNetwork() {
   (layout==='freeform'?networkButton('arrange',lineIcon('canvas')+'<span>Organize</span>','','title="Organize visible nodes by connections"'):'')+
   (layout==='freeform'&&space.graphArrangeUndo?networkButton('undo-arrange',lineIcon('undo'),'','aria-label="Undo graph organization" title="Undo organization"'):'')+'</div></div></main><div class="network-add">'+studioButton('note',lineIcon('note')+'Note')+studioButton('agent',lineIcon('agent')+'Agent')+studioButton('task',lineIcon('task')+'Task')+'</div>'+
   '<aside id="space-inspector" hidden></aside><aside id="space-library" hidden></aside>'+
-  (network.settings?'<section class="graph-settings"><div class="floating-heading"><h2>Graph settings</h2>'+networkButton('filters',lineIcon('close'),'','aria-label="Close graph settings"')+'</div><label>Labels<select id="graph-labels" aria-label="Graph labels">'+['auto','always','off'].map(v=>'<option value="'+v+'" '+(network.labels===v?'selected':'')+'>'+({auto:'Automatic',always:'Always visible',off:'Selection only'}[v])+'</option>').join('')+'</select></label><label>Node size<input id="graph-size" type="range" min="0.6" max="1.8" step="0.1" value="'+network.nodeScale+'"></label><label>Edge visibility<input id="graph-edges" type="range" min="0.08" max="0.65" step="0.01" value="'+network.edgeOpacity+'"></label><p>'+({spatial:'Drag a record to pull its linked neighbors. Release to settle them back. Drag empty space to rotate, Shift-drag to pan, or Alt-drag to roll.',atlas:'Nearby records share a hub or component. The fine contours show the surface. Colored marks are records. Drag a record to pull its neighbors. Drag the surface to rotate, Shift-drag to pan, or Alt-drag to roll.',flow:'Columns group records by type. Curves follow saved links. Select a record to see the direction and kind of each connection.',clusters:graphLayoutHelp.clusters,orbit:graphLayoutHelp.orbit,freeform:'Drag a node to place it, or organize the visible nodes by their connections.'}[layout])+'</p>'+(layout==='freeform'?networkButton('arrange','Organize visible nodes'):'')+'</section>':'')+
+  (network.settings?'<section class="graph-settings"><div class="floating-heading"><h2>Graph settings</h2>'+networkButton('filters',lineIcon('close'),'','aria-label="Close graph settings"')+'</div><label>Labels<select id="graph-labels" aria-label="Graph labels">'+['auto','always','off'].map(v=>'<option value="'+v+'" '+(network.labels===v?'selected':'')+'>'+({auto:'Automatic',always:'Always visible',off:'Selection only'}[v])+'</option>').join('')+'</select></label><label>Node size<input id="graph-size" type="range" min="0.6" max="1.8" step="0.1" value="'+network.nodeScale+'"></label><label>Edge visibility<input id="graph-edges" type="range" min="0.08" max="0.65" step="0.01" value="'+network.edgeOpacity+'"></label><p>'+({signal:graphLayoutHelp.signal,spatial:'Drag a record to pull its linked neighbors. Release to settle them back. Drag empty space to rotate, Shift-drag to pan, or Alt-drag to roll.',atlas:'Nearby records share a hub or component. The fine contours show the surface. Colored marks are records. Drag a record to pull its neighbors. Drag the surface to rotate, Shift-drag to pan, or Alt-drag to roll.',flow:'Columns group records by type. Curves follow saved links. Select a record to see the direction and kind of each connection.',clusters:graphLayoutHelp.clusters,orbit:graphLayoutHelp.orbit,freeform:'Drag a node to place it, or organize the visible nodes by their connections.'}[layout])+'</p>'+(layout==='freeform'?networkButton('arrange','Organize visible nodes'):'')+'</section>':'')+
   appearancePanel()+'<div id="connect-banner" '+(!studio.connecting?'hidden':'')+'>Choose a node to connect'+studioButton('cancel','Cancel')+'</div>';
   network.hovered=null;
   if(investigation)renderInvestigation(investigation,nodes,links);
@@ -395,7 +397,7 @@ function applyNetworkCamera() {
   $('.network-edges').style.opacity=Math.min(.9,network.edgeOpacity*(spatialLayout(network.layout)?2.15:1.45));
   $('.network-stage').style.setProperty('--grid-x',(c.x*.12)+'px');$('.network-stage').style.setProperty('--grid-y',(c.y*.12)+'px');
   const stage=$('.network-stage');
-  stage.dataset.overview=String((network.layout==='atlas'||network.layout==='spatial'&&network.positions.size>80)&&c.scale<1.6);
+  stage.dataset.overview=String((network.layout==='signal'||network.layout==='atlas'||network.layout==='spatial'&&network.positions.size>80)&&c.scale<1.6);
   placeNetworkLabels();
 }
 const graphLabelMetrics=new WeakMap();
@@ -403,7 +405,7 @@ const graphLabelSlots=new WeakMap();
 function placeNetworkLabels() {
   const {scale,x:panX,y:panY}=network.camera;
   const groups=[...document.querySelectorAll('[data-knowledge-node]')];
-  const overview=(network.layout==='atlas'||network.layout==='spatial'&&network.positions.size>80)&&scale<1.6&&network.labels==='auto';
+  const overview=(network.layout==='signal'||network.layout==='atlas'||network.layout==='spatial'&&network.positions.size>80)&&scale<1.6&&network.labels==='auto';
   const viewport = $('.network-stage').getBoundingClientRect();
   const heading = document.querySelector('.network-context')?.getBoundingClientRect();
   const headingBoxes = heading ? [{
@@ -442,7 +444,7 @@ function placeNetworkLabels() {
     labels.sort((a,b)=>priority(b)-priority(a));
   }
   // SVG text measurements can flush layout. Read all missing metrics before writes.
-  const full=scale>=.8&&!['atlas','spatial','orbit','clusters'].includes(network.layout),fontStatus=document.fonts?.status;
+  const full=scale>=.8&&!['signal','atlas','spatial','orbit','clusters'].includes(network.layout),fontStatus=document.fonts?.status;
   for(const group of labels){
     const text=group.querySelector('text'),state=full&&text.querySelector('.node-state-label');
     const metric=graphLabelMetrics.get(text);
@@ -632,12 +634,20 @@ async function openNetworkNode(id,goingBack=false) {
   }
   drawInspector();highlightNetwork();
   const svg=$('.knowledge-svg'),panel=$('#space-inspector'),point=network.positions.get(id);
+  const animate=appearance().motion!==false&&!matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if(animate&&panel&&previous!==id)panel.animate([{opacity:.55,translate:'10px 0'},{opacity:1,translate:'0 0'}],{duration:230,easing:'ease-out'});
   if(svg&&panel&&point){
     const box=svg.getBoundingClientRect(),inspector=panel.getBoundingClientRect();
     const right=inspector.left>box.left+120?Math.min(box.width,inspector.left-box.left):box.width;
     const c=network.camera,px=point[0]*c.scale+c.x,py=point[1]*c.scale+c.y;
     if(px<24||px>right-24||py<24||py>box.height-72){
       network.camera={...c,x:c.x+right/2-px,y:c.y+box.height/2-py};applyNetworkCamera();persistNetwork();
+      if(animate){
+        const world=svg.querySelector('.network-world');
+        const transform=v=>'translate('+v.x+'px,'+v.y+'px) scale('+v.scale+')';
+        world.getAnimations().forEach(a=>a.cancel());
+        world.animate([{transform:transform(c)},{transform:transform(network.camera)}],{duration:330,easing:'cubic-bezier(.2,.72,.2,1)'});
+      }
     }
   }
 }

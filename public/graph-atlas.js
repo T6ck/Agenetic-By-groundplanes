@@ -2,15 +2,15 @@
 
 // The atlas surface supplies orientation. Only workspace records and saved links
 // participate in selection, counts, search, and traversal.
-const graphLayouts = {signal:'Signal field',atlas:'Atlas',spatial:'Spatial',clusters:'Clusters',orbit:'Orbit',flow:'Flow',freeform:'Freeform'};
+const graphLayouts = {signal:'Trace map',atlas:'Relief map',spatial:'Spatial view',clusters:'Clusters',orbit:'Orbit',flow:'Flow',freeform:'Freeform'};
 const graphLayoutHelp = {
-  signal:'Follow the strands to explore a group. Select a record to read its source.',
-  atlas:'Each ridge groups connected records. Drag to turn the map.',
-  spatial:'Drag the space to rotate. Pull a record to trace its neighbors.',
-  clusters:'Follow links between groups of related records.',
-  orbit:'Each ring adds a link from the center. Open a record to recenter.',
-  flow:'Read across the columns to follow a workflow.',
-  freeform:'Drag records to arrange your own map.'
+  signal:'Saved links form the trace. Select a record to isolate its immediate evidence.',
+  atlas:'Connected records share a relief. Drag the surface to inspect depth.',
+  spatial:'Drag empty space to turn. Drag a record to pull its linked evidence forward.',
+  clusters:'Compare connected groups and open a record to inspect the source.',
+  orbit:'Read outward from a selected record. Open another record to recenter.',
+  flow:'Read saved links across the work sequence.',
+  freeform:'Arrange records yourself, then save the workspace.'
 };
 const atlasHomeAngle = -.28;
 function workspaceGraphLayout(space) {
@@ -171,7 +171,7 @@ function signalPaths(lanes,matrix,coarse){
   for(const lane of lanes.slice(0,32)){
     if(lane.loose)continue;
     const steps=coarse?12:44;
-    for(let j=0;j<28;j+=coarse?4:1){
+    for(let j=0;j<9;j+=coarse?3:1){
       const points=[];
       for(let n=0;n<=steps;n++){
         const p=projectPoint(signalPoint(lane,n/steps,j*.735,(.36+.64*(j*13%29)/29)),matrix);

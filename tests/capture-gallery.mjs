@@ -82,12 +82,8 @@ try{
   }
   async function layout(name){
     if(await page.locator('.network-stage').getAttribute('data-layout')!==name){
-      const control=page.locator('[data-network=layout][data-key="'+name+'"]');
-      if(!await control.isVisible()){
-        const toggle=page.locator('summary,button[aria-haspopup]').filter({hasText:/layout|graph design/i});
-        if(await toggle.count())await toggle.first().click();
-      }
-      await control.click({timeout:6000});
+      const control=page.locator('.map-view-select');
+      await control.selectOption(name,{timeout:6000});
     }
     await page.locator('.network-stage[data-layout="'+name+'"]').waitFor();
     await page.locator('[data-network=fit]').first().click();

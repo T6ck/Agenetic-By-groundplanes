@@ -4,13 +4,14 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 
 const source=readFileSync('public/graph-atlas.js','utf8');
-const api=runInNewContext(source+'\n({atlasCloud,homeOrientation,savedOrientation,composeRotation,axisRotation,viewMatrix,projectPoint,spatialCloud,flowArrangement,orbitArrangement,clusterArrangement,workspaceGraphLayout,graphCameraKey})');
-test('new spaces open in Atlas and existing manual layouts keep their workspace camera',()=>{
-  assert.equal(api.workspaceGraphLayout({}), 'signal');
+const api=runInNewContext(source+'\n({planeArrangement,atlasCloud,homeOrientation,savedOrientation,composeRotation,axisRotation,viewMatrix,projectPoint,spatialCloud,flowArrangement,orbitArrangement,clusterArrangement,workspaceGraphLayout,graphCameraKey})');
+test('new spaces open in Map, retired views open as Map, and manual layouts keep their camera',()=>{
+  assert.equal(api.workspaceGraphLayout({}), 'map');
+  for(const old of ['signal','atlas','clusters'])assert.equal(api.workspaceGraphLayout({graphLayout:old}),'map');
   assert.equal(api.workspaceGraphLayout({graphPositions:{a:[10,4]}}),'freeform');
   assert.equal(api.workspaceGraphLayout({graphCamera:{scale:.5,x:0,y:0}}),'freeform');
   assert.equal(api.workspaceGraphLayout({graphLayout:'flow',graphPositions:{a:[1,2]}}),'flow');
-  assert.equal(new Set(['atlas','spatial','clusters','orbit','flow','freeform'].map(api.graphCameraKey)).size,6);
+  assert.equal(new Set(['map','spatial','orbit','flow','freeform'].map(api.graphCameraKey)).size,5);
 });
 test('every record has finite stable coordinates, including unlinked notes and disconnected pairs',()=>{
   const nodes=Array.from({length:1500},(_,i)=>({id:'n'+i,name:'Item '+i,kind:i%11?'file':'agent'}));
@@ -72,4 +73,27 @@ test('Spatial includes isolated records and separates front, interior, and rear 
   const cloud=api.spatialCloud(api.atlasCloud(nodes,links).regions);
   assert.equal(cloud.size,10);assert.ok(cloud.has('n9'));
   assert.ok(new Set([...cloud.values()].map(p=>p[2])).size>=7);
+});
+
+test('the map gives every record a place, keeps names apart, and puts unlinked records on the ground line',()=>{
+  const nodes=[...'abcdefghij'].map((c,i)=>({id:c,kind:i%3?'file':'agent',name:'Record named '+c.repeat(i%4+1)}));
+  nodes.push({id:'x',kind:'file',name:'Loose note one'},{id:'y',kind:'task',name:'Loose task two'});
+  const links=[['a','b'],['a','c'],['a','d'],['b','c'],['e','f'],['e','g'],['f','g'],['h','i'],['i','j'],['d','e']].map(([from,to])=>({from,to,kind:'reference'}));
+  const {regions}=api.atlasCloud(nodes,links);
+  const plan=api.planeArrangement(nodes,links,regions);
+  for(const n of nodes){const p=plan.positions.get(n.id);assert.ok(p&&p.every(Number.isFinite),n.id)}
+  // same input, same map
+  assert.deepEqual([...api.planeArrangement(nodes,links,regions).positions],[...plan.positions]);
+  // unlinked records sit below every linked one
+  const lowest=Math.max(...'abcdefghij'.split('').map(id=>plan.positions.get(id)[1]));
+  for(const id of ['x','y'])assert.ok(plan.positions.get(id)[1]>lowest,id+' is not on the ground line');
+  assert.equal(plan.ground.count,2);
+  // label boxes of linked records do not overlap
+  const box=id=>{const [x,y]=plan.positions.get(id),n=nodes.find(n=>n.id===id);return {x:x-10,y:y-10,w:Math.min(42,n.name.length)*6.7+26,h:20}};
+  const ids='abcdefghij'.split('');
+  for(let i=0;i<ids.length;i++)for(let j=i+1;j<ids.length;j++){
+    const A=box(ids[i]),B=box(ids[j]);
+    assert.ok(!(A.x<B.x+B.w&&A.x+A.w>B.x&&A.y<B.y+B.h&&A.y+A.h>B.y),ids[i]+' overlaps '+ids[j]);
+  }
+  assert.ok(plan.territories.length>=1,'linked groups of three or more get a territory');
 });

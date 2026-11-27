@@ -44,7 +44,10 @@ function renderSourceWorkspace(){
  document.body.classList.remove('mindspace','knowledge-mode','studio','immersive','model-library-page');
  const links=studioLinks();
  const options=(omit)=>files.filter(f=>f.id!==omit).map(f=>'<option value="'+esc(f.id)+'">'+esc(f.name)+'</option>').join('');
- host.innerHTML='<main class="reading-workspace"><header class="reading-bar"><b>'+brandMark()+' Agenetic</b><button data-command="spaces">'+esc(space.name)+' ▾</button><nav><button data-reading="import">Import</button><button data-reading="map">Map</button><button data-global-appearance>Appearance</button><button data-navigate>Navigate</button><button data-profiles>Profiles</button></nav></header>'+
+ // The same bar as Graph: brand, workspace, the Files/Graph switch, then
+ // quiet actions. Before, Files had its own row of outlined buttons and
+ // moving to Graph felt like opening a different program.
+ host.innerHTML='<main class="reading-workspace"><header class="reading-bar"><b class="reading-brand">'+brandMark()+'<span>Agenetic<small>by Groundplanes</small></span></b><button class="reading-space" data-command="spaces">'+lineIcon('folder')+'<span>'+esc(space.name)+'</span>'+lineIcon('chevron')+'</button><div class="view-switch" aria-label="Workspace view"><button type="button" class="active" aria-pressed="true">'+lineIcon('note')+'Files</button><button type="button" data-reading="map" aria-pressed="false">'+lineIcon('graph')+'Graph</button></div><nav><button data-reading="import">Import</button><button data-global-appearance>Appearance</button><button data-navigate>Navigate</button><button data-profiles>Profiles</button></nav></header>'+
  '<div class="reading-layout"><aside class="reading-library"><header><h2>Files</h2><small>'+files.length+'</small></header><input type="search" id="reading-search" aria-label="Find a file" placeholder="Find a file">'+
  '<div class="reading-list">'+files.map(f=>'<button data-reading="open" data-id="'+esc(f.id)+'" aria-current="'+(f.id===primary?.id)+'">'+esc(f.name)+'</button>').join('')+'</div><button data-reading="note">Write a note</button></aside>'+
  '<section class="reading-desk"><div class="reading-toolbar"><label>Open file <select id="reading-primary">'+options()+'</select></label>'+

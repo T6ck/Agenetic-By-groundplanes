@@ -2,8 +2,13 @@
 
 // The atlas surface supplies orientation. Only workspace records and saved links
 // participate in selection, counts, search, and traversal.
-const graphLayouts = {signal:'Trace map',atlas:'Relief map',spatial:'Spatial view',clusters:'Clusters',orbit:'Orbit',flow:'Flow',freeform:'Freeform'};
+// Map is the default: a flat, readable plan of the workspace. Trace map,
+// Relief map and Clusters drew the same groups in harder-to-read ways and
+// now open as Map; their saved settings are left in place, unused.
+const graphLayouts = {map:'Map',flow:'Flow',orbit:'Orbit',spatial:'3D',freeform:'Freeform'};
+const retiredLayouts = new Set(['signal','atlas','clusters']);
 const graphLayoutHelp = {
+  map:'Each shaded area is a group of linked records. Records with no links wait on the ground line. Hover a record to see what it connects to.',
   signal:'Saved links form the trace. Select a record to isolate its immediate evidence.',
   atlas:'Connected records share a relief. Drag the surface to inspect depth.',
   spatial:'Drag empty space to turn. Drag a record to pull its linked evidence forward.',
@@ -15,7 +20,8 @@ const graphLayoutHelp = {
 const atlasHomeAngle = -.28;
 function workspaceGraphLayout(space) {
   if (Object.hasOwn(graphLayouts,space.graphLayout)) return space.graphLayout;
-  return Object.keys(space.graphPositions||{}).length || space.graphCamera ? 'freeform' : 'signal';
+  if (retiredLayouts.has(space.graphLayout)) return 'map';
+  return Object.keys(space.graphPositions||{}).length || space.graphCamera ? 'freeform' : 'map';
 }
 function graphCameraKey(layout) {
   return layout==='freeform'||!Object.hasOwn(graphLayouts,layout)?'graphCamera':layout+'Camera';
@@ -257,6 +263,148 @@ function clusterArrangement(regions){
   }
   return {positions,districts};
 }
+// ════════════════════════════════════════════════════════════════════
+// MAP
+// A flat plan of the workspace, laid out so it can be read at a glance:
+//  · records that link to each other settle together, and each linked
+//    group gets a territory named after its most connected record;
+//  · records with no saved links sit on a ground line below the map
+//    rather than floating among linked work they have nothing to do with;
+//  · repulsion is measured against an ellipse as wide as the label, so
+//    names have room before the label pass ever has to hide one.
+// Deterministic: the same records and links always give the same map.
+// ════════════════════════════════════════════════════════════════════
+function planeLabelHalf(name){return Math.min(42,name.length)*3.35+22}
+function planeArrangement(nodes,links,regions){
+  const present=new Set(nodes.map(n=>n.id)),names=new Map(nodes.map(n=>[n.id,n.name.replace(/\.md$/i,'')]));
+  const groups=regions.filter(r=>r.id!=='isolated').map(r=>({...r,ids:r.ids.filter(id=>present.has(id))})).filter(r=>r.ids.length);
+  const loose=nodes.filter(n=>!groups.some(g=>g.ids.includes(n.id))).map(n=>n.id);
+  const points=[],byId=new Map();
+  groups.forEach((g,gi)=>{
+    const angle=gi*2.399963,reach=gi?150+Math.sqrt(gi)*150:0;
+    const cx=Math.cos(angle)*reach*1.5,cy=Math.sin(angle)*reach*.8;
+    g.ids.forEach((id,j)=>{
+      const r=j?30*Math.sqrt(j):0,t=j*2.399963+gi;
+      const p={id,g:gi,x:cx+Math.cos(t)*r*1.6,y:cy+Math.sin(t)*r,vx:0,vy:0,w:planeLabelHalf(names.get(id)||'')};
+      points.push(p);byId.set(id,p);
+    });
+  });
+  const edges=links.filter(l=>l.from!==l.to&&byId.has(l.from)&&byId.has(l.to));
+  const count=points.length,rounds=count>220?140:count>90?220:320;
+  for(let k=0;k<rounds;k++){
+    const heat=1-k/rounds,limit=1.5+11*heat;
+    const centre=groups.map(()=>[0,0,0]);
+    for(const p of points){const c=centre[p.g];c[0]+=p.x;c[1]+=p.y;c[2]++}
+    for(let i=0;i<count;i++){
+      const a=points[i];
+      for(let j=i+1;j<count;j++){
+        const b=points[j],dx=a.x-b.x,dy=a.y-b.y;
+        const sx=a.w+b.w,sy=40,nx=dx/sx,ny=dy/sy,d2=Math.max(.0004,nx*nx+ny*ny);
+        let f=(a.g===b.g?5:11)/d2;
+        if(d2<1)f+=30*(1-d2);
+        f=Math.min(f,60);
+        const len=Math.hypot(dx,dy)||1;
+        a.vx+=dx/len*f*.1;a.vy+=dy/len*f*.1;b.vx-=dx/len*f*.1;b.vy-=dy/len*f*.1;
+      }
+    }
+    for(const l of edges){
+      const a=byId.get(l.from),b=byId.get(l.to),dx=b.x-a.x,dy=b.y-a.y,len=Math.hypot(dx,dy)||1;
+      const rest=a.g===b.g?a.w+b.w+30:a.w+b.w+170,f=(len-rest)*.018;
+      a.vx+=dx/len*f;a.vy+=dy/len*f;b.vx-=dx/len*f;b.vy-=dy/len*f;
+    }
+    for(const p of points){
+      const c=centre[p.g];
+      p.vx+=(c[0]/c[2]-p.x)*.012;p.vy+=(c[1]/c[2]-p.y)*.012;
+      p.vx-=p.x*.0016;p.vy-=p.y*.0034;
+      const v=Math.hypot(p.vx,p.vy);if(v>limit){p.vx*=limit/v;p.vy*=limit/v}
+      p.x+=p.vx;p.y+=p.vy;p.vx*=.55;p.vy*=.55;
+    }
+  }
+  // Territories must not overlap, or a record looks like it belongs to
+  // two groups. Separate the groups' boxes (names included, plus room for
+  // the territory's own title) along whichever axis needs less travel.
+  const box=g=>{const m=points.filter(p=>p.g===g);return {g,m,
+    x1:Math.min(...m.map(p=>p.x-22)),x2:Math.max(...m.map(p=>p.x+p.w*2-8)),
+    y1:Math.min(...m.map(p=>p.y-46)),y2:Math.max(...m.map(p=>p.y+24))}};
+  for(let pass=0;pass<60;pass++){
+    let moved=false;
+    const boxes=groups.map((_,g)=>box(g)).filter(b=>b.m.length);
+    for(let i=0;i<boxes.length;i++)for(let j=i+1;j<boxes.length;j++){
+      const a=boxes[i],b=boxes[j];
+      const ox=Math.min(a.x2,b.x2)-Math.max(a.x1,b.x1),oy=Math.min(a.y2,b.y2)-Math.max(a.y1,b.y1);
+      if(ox<=0||oy<=0)continue;
+      moved=true;
+      const ax=(a.x1+a.x2)/2,bx=(b.x1+b.x2)/2,ay=(a.y1+a.y2)/2,by=(b.y1+b.y2)/2;
+      const [dx,dy]=ox<oy*1.6?[(ax<bx?-1:1)*(ox/2+6),0]:[0,(ay<by?-1:1)*(oy/2+6)];
+      for(const p of a.m){p.x+=dx;p.y+=dy}
+      for(const p of b.m){p.x-=dx;p.y-=dy}
+      a.x1+=dx;a.x2+=dx;a.y1+=dy;a.y2+=dy;b.x1-=dx;b.x2-=dx;b.y1-=dy;b.y2-=dy;
+    }
+    if(!moved)break;
+  }
+  const positions=new Map(points.map(p=>[p.id,[Math.round(p.x),Math.round(p.y)]]));
+  // The ground line: unlinked records in rows under everything else.
+  let ground=null;
+  if(loose.length){
+    const xs=points.map(p=>p.x),left=points.length?Math.min(...xs.map((x,i)=>x-points[i].w)):-300;
+    const right=points.length?Math.max(...xs.map((x,i)=>x+points[i].w)):300;
+    const width=Math.max(520,right-left),top=(points.length?Math.max(...points.map(p=>p.y)):0)+150;
+    let x=left,row=0;
+    for(const id of loose){
+      const w=planeLabelHalf(names.get(id)||'')*2;
+      if(x+w>left+width&&x>left){x=left;row++}
+      positions.set(id,[Math.round(x+14),Math.round(top+row*44)]);
+      x+=w+18;
+    }
+    ground={x1:left-20,x2:left+width+20,y:top-36,count:loose.length};
+  }
+  const territories=groups.map((g,i)=>{
+    if(g.ids.length<3)return null;
+    const corners=[];
+    for(const id of g.ids){
+      const [x,y]=positions.get(id),w=planeLabelHalf(names.get(id)||'');
+      corners.push([x-16,y-16],[x-16,y+16],[x+w*2-14,y-14],[x+w*2-14,y+14]);
+    }
+    return {name:g.name.replace(/\.md$/i,''),count:g.ids.length,index:i,hull:planeHull(corners)};
+  }).filter(Boolean);
+  return {positions,territories,ground};
+}
+// Convex hull (monotone chain), then pushed outward so the shape clears
+// the records it holds.
+function planeHull(points){
+  const p=[...points].sort((a,b)=>a[0]-b[0]||a[1]-b[1]);
+  if(p.length<3)return p;
+  const cross=(o,a,b)=>(a[0]-o[0])*(b[1]-o[1])-(a[1]-o[1])*(b[0]-o[0]);
+  const lower=[],upper=[];
+  for(const q of p){while(lower.length>1&&cross(lower[lower.length-2],lower[lower.length-1],q)<=0)lower.pop();lower.push(q)}
+  for(const q of p.reverse()){while(upper.length>1&&cross(upper[upper.length-2],upper[upper.length-1],q)<=0)upper.pop();upper.push(q)}
+  const hull=lower.slice(0,-1).concat(upper.slice(0,-1));
+  const cx=hull.reduce((s,q)=>s+q[0],0)/hull.length,cy=hull.reduce((s,q)=>s+q[1],0)/hull.length;
+  return hull.map(([x,y])=>{const d=Math.hypot(x-cx,y-cy)||1;return [x+(x-cx)/d*18,y+(y-cy)/d*18]});
+}
+// A closed, rounded outline through the hull: each corner becomes a
+// curve between the midpoints of its two sides.
+function planeOutline(hull){
+  if(hull.length<3)return '';
+  const mid=(a,b)=>[(a[0]+b[0])/2,(a[1]+b[1])/2],n=hull.length;
+  const start=mid(hull[n-1],hull[0]);
+  let d='M'+start[0].toFixed(1)+' '+start[1].toFixed(1);
+  for(let i=0;i<n;i++){const m=mid(hull[i],hull[(i+1)%n]);d+='Q'+hull[i][0].toFixed(1)+' '+hull[i][1].toFixed(1)+' '+m[0].toFixed(1)+' '+m[1].toFixed(1)}
+  return d+'Z';
+}
+function planeUnderlay(nodes){
+  const visible=new Set(nodes.map(n=>n.id));
+  const t=(network.territories||[]).map(z=>{
+    const top=z.hull.reduce((a,b)=>b[1]<a[1]?b:a),left=Math.min(...z.hull.map(q=>q[0]));
+    const label=(z.name.length>30?z.name.slice(0,29)+'…':z.name).toUpperCase();
+    return '<g class="plane-territory tone-'+(z.index%5)+'"><path d="'+planeOutline(z.hull)+'"/>'+
+      '<text class="plane-territory-name" x="'+(left+22).toFixed(1)+'" y="'+(top[1]-10).toFixed(1)+'">'+esc(label)+
+      '<tspan class="plane-territory-count" dx="8">'+z.count+'</tspan></text></g>';
+  }).join('');
+  const g=network.ground,ground=g&&[...visible].some(id=>network.positions.get(id)?.[1]>g.y)?
+    '<g class="plane-ground"><line x1="'+g.x1+'" x2="'+g.x2+'" y1="'+g.y+'" y2="'+g.y+'"/><text x="'+(g.x1+6)+'" y="'+(g.y-10)+'">NOT LINKED YET<tspan dx="8">'+g.count+'</tspan></text></g>':'';
+  return '<g class="plane-underlay" aria-hidden="true">'+t+ground+'</g>';
+}
 function layoutGuides(nodes){
   const ids=new Set(nodes.map(n=>n.id));
   if(network.layout==='orbit'){
@@ -386,6 +534,7 @@ function spatialDefinitions(){
 }
 function graphViewUnderlay(nodes) {
   if(!nodes.length)return '';
+  if(network.layout==='map')return planeUnderlay(nodes);
   if(network.layout==='clusters'||network.layout==='orbit')return layoutGuides(nodes);
   if(network.layout==='flow'){
     const visible=new Set(nodes.map(n=>n.kind));
@@ -407,7 +556,9 @@ function graphLinkPath(a,b,layout) {
     const bend=x===tx?Math.min(72,Math.abs(ty-y)*.36+18):(tx-x)*.49;
     return 'M'+x+' '+y+'C'+(x+bend)+' '+y+' '+(x===tx?tx+bend:tx-bend)+' '+ty+' '+tx+' '+ty;
   }
-  const lift=Math.min(56,Math.hypot(tx-x,ty-y)*.18);
+  // Map: a gentle bow, so two links between the same pair never sit on
+  // top of each other and long links read as arcs over the territories.
+  const lift=Math.min(layout==='map'?28:56,Math.hypot(tx-x,ty-y)*(layout==='map'?.08:.18));
   return 'M'+x+' '+y+'Q'+((x+tx)/2)+' '+((y+ty)/2-lift)+' '+tx+' '+ty;
 }
 function graphLinkMarkup(link) {
@@ -420,7 +571,7 @@ function graphLinkMarkup(link) {
 function atlasNode(n,links) {
   const [x,y]=network.positions.get(n.id),degree=degreeFor(n.id,links);
   const spatial=spatialLayout(network.layout);
-  const radius=(4.3+Math.min(6,Math.sqrt(degree)*1.4))*network.nodeScale*(network.layout==='signal'?.79:spatial?1.22:1);
+  const radius=(4.3+Math.min(6,Math.sqrt(degree)*1.4))*network.nodeScale*(network.layout==='signal'?.79:spatial?1.22:network.layout==='map'?1.45:1);
   const shape={file:'M-.8 -1H.32L.86 -.45V1H-.8Z',agent:'M-.98 -.58L-.56 -.96H.98V.58L.56 .96H-.98Z',task:'M-.95 -.8H.4L1 0 .4 .8H-.95Z',model:'M-.5 -.9H.5L1 0 .5 .9H-.5L-1 0Z'};
   const name=n.name.replace(/\.md$/i,''),label=objectLabel(n);
   const landmark=!spatialLayout(network.layout)||network.landmarks.has(n.id);

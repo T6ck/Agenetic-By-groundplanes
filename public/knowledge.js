@@ -203,6 +203,12 @@ function calculateNetwork(force=false) {
     updateProjection();
     return;
   }
+  if(network.layout==='map'){
+    const {regions}=atlasCloud(nodes,links);
+    const plan=planeArrangement(nodes,links,regions);
+    network.positions=plan.positions;network.territories=plan.territories;network.ground=plan.ground;network.regions=regions;
+    return;
+  }
   if(network.layout==='clusters'){
     const {regions}=atlasCloud(nodes,links);
     const {positions,districts}=clusterArrangement(regions);
@@ -316,14 +322,16 @@ function renderNetwork() {
   const query=network.search.trim().toLowerCase();
   const explorerNodes=spaceNodes().filter(node=>matchesExplorerQuery(node,query));
   if(network.previousCount===0&&nodes.length)network.needFit=true;network.previousCount=nodes.length;
-  const layoutSwitch='<label class="map-view-control"><span>Map view</span><select class="map-view-select" aria-label="Map view">'+Object.entries(graphLayouts).map(([key,name])=>'<option value="'+key+'" '+(layout===key?'selected':'')+'>'+esc(name)+'</option>').join('')+'</select></label>';
+  // A segmented control, not a <select>: five choices fit on one line, and
+  // seeing them all is how people find out the other views exist.
+  const layoutSwitch='<div class="map-view-switch" role="radiogroup" aria-label="Map view">'+Object.entries(graphLayouts).map(([key,name])=>networkButton('layout',esc(name),key,'role="radio" aria-checked="'+(layout===key)+'"'+(layout===key?' class="active" tabindex="0"':' tabindex="-1"'))).join('')+'</div>';
   const investigation=investigationStates.get(space);
   const investigateEntry=investigationButton('open','Investigate','','class="invest-entry" aria-controls="investigation-pane" aria-expanded="'+!!(investigation&&(innerWidth>760||investigation.sheet))+'"');
   const angles=[['left','Turn left'],['right','Turn right'],['up','Tilt up'],['down','Tilt down'],['ccw','Roll left'],['cw','Roll right'],['reset','Reset angle']];
-  const viewControl=spatialLayout(layout)&&nodes.length?'<div class="orientation-control"><span class="orientation-compass" aria-hidden="true">＋</span><span><strong>Orientation</strong><small>Drag empty space to turn</small></span><select class="graph-angle" aria-label="Map orientation" title="Choose an orientation, or Alt-drag to roll"><option selected disabled>Adjust</option>'+angles.map(([key,label])=>'<option value="'+key+'">'+label+'</option>').join('')+'</select></div>':'<p class="map-gesture">Drag to pan · scroll to zoom · select a record to trace its links</p>';
-  const layoutTools='<div class="graph-view-tools"><button class="map-return" data-reading="home">'+lineIcon('arrow')+'<span>Files</span></button>'+layoutSwitch+viewControl+networkButton('fit',lineIcon('fit')+'<span>Center map</span>','','class="map-center"')+investigateEntry+'</div>';
+  const viewControl=spatialLayout(layout)&&nodes.length?'<div class="orientation-control" role="group" aria-label="Map orientation"><small>Drag to turn</small>'+angles.map(([key,label])=>networkButton('turn','<span class="orientation-glyph orientation-'+key+'" aria-hidden="true"></span>',key,'aria-label="'+label+'" title="'+label+'"')).join('')+'</div>':'';
+  const layoutTools='<div class="graph-view-tools">'+layoutSwitch+viewControl+investigateEntry+'</div>';
   const selected=!investigation&&studioNodes().find(n=>n.id===network.focus);
-  $('#content').innerHTML='<header class="knowledge-header"><div class="knowledge-brand">'+brandMark()+'<div class="brand-family"><strong>Agenetic</strong><small>by Groundplanes</small></div></div><button data-command="spaces" class="knowledge-space">'+esc(space.name)+lineIcon('chevron')+'</button><div class="view-switch" aria-label="Workspace view">'+networkButton('graph',lineIcon('graph')+'Graph','','class="active" aria-pressed="true"')+networkButton('canvas',lineIcon('canvas')+'Canvas','','aria-pressed="false"')+'</div><div class="knowledge-header-actions"><span class="private-label">'+(space.id===data.exampleSpaceId?'Example data':'Local workspace')+'</span>'+networkButton('appearance',lineIcon('palette')+'Appearance','','aria-label="Appearance"')+''+networkButton('filters',lineIcon('settings'),'','aria-label="Graph settings" aria-expanded="'+network.settings+'"')+studioButton('share',lineIcon('download')+'Export','','aria-label="Export workflow"')+'</div></header>'+
+  $('#content').innerHTML='<header class="knowledge-header"><div class="knowledge-brand">'+brandMark()+'<div class="brand-family"><strong>Agenetic</strong><small>by Groundplanes</small></div></div><button data-command="spaces" class="knowledge-space">'+esc(space.name)+lineIcon('chevron')+'</button><div class="view-switch" aria-label="Workspace view">'+'<button type="button" data-reading="home" aria-pressed="false">'+lineIcon('note')+'Files</button>'+networkButton('graph',lineIcon('graph')+'Graph','','class="active" aria-pressed="true"')+networkButton('canvas',lineIcon('canvas')+'Canvas','','aria-pressed="false"')+'</div><div class="knowledge-header-actions"><span class="private-label">'+(space.id===data.exampleSpaceId?'Example data':'Local workspace')+'</span>'+networkButton('appearance',lineIcon('palette')+'Appearance','','aria-label="Appearance"')+''+networkButton('filters',lineIcon('settings'),'','aria-label="Graph settings" aria-expanded="'+network.settings+'"')+studioButton('share',lineIcon('download')+'Export','','aria-label="Export workflow"')+'</div></header>'+
   '<aside id="graph-explorer" class="knowledge-explorer" aria-label="Graph explorer"><div class="explorer-title"><span>EXPLORER</span>'+studioButton('note',lineIcon('plus'),'','aria-label="New note"')+'</div><label class="knowledge-search">'+lineIcon('search')+'<input id="knowledge-query" type="search" value="'+esc(network.search)+'" placeholder="Search this space" aria-label="Search this space"></label><div class="space-navigation">'+networkButton('all',lineIcon('graph')+'All connections','','class="'+(!network.focus?'current':'')+'"')+'</div><div class="knowledge-file-list">'+['file','agent','task','model'].map(kind=>{
     const items=explorerNodes.filter(n=>n.kind===kind);if(!items.length)return '';
     return '<details data-explorer-kind="'+kind+'" '+(space.explorerClosed?.includes(kind)?'':'open')+'><summary>'+({file:'Notes and sources',agent:'Agents',task:'Tasks',model:'Models'}[kind])+'<span>'+items.length+'</span></summary>'+items.map(n=>networkButton('open',lineIcon({file:'note',agent:'agent',task:'task',model:'model'}[kind])+'<span>'+esc(n.name)+'</span>'+(n.research?'<small class="research-state">'+esc(researchStateLabel(n))+'</small>':''),n.id,'class="'+(studio.selected.has(n.id)?'selected':'')+'"')).join('')+'</details>';
@@ -400,6 +408,14 @@ function applyNetworkCamera() {
   placeNetworkLabels();
 }
 const graphLabelMetrics=new WeakMap();
+// Freeform records are drawn as shells without an .orb-body circle; reading
+// its radius unguarded threw on every Freeform render.
+function nodeRadius(group){
+  const body=group.querySelector('.orb-body');
+  if(body)return Number(body.getAttribute('r'))||10;
+  const hit=group.querySelector('.node-hit');
+  return Math.max(8,(Number(hit?.getAttribute('r'))||24)-14);
+}
 const graphLabelSlots=new WeakMap();
 function placeNetworkLabels() {
   const {scale,x:panX,y:panY}=network.camera;
@@ -424,12 +440,12 @@ function placeNetworkLabels() {
     visit(box,key=>{let tile=tiles.get(key);if(!tile){tile=[];tiles.set(key,tile);}tile.push(box);});
   }
   headingBoxes.forEach(insert);
-  for(const guide of document.querySelectorAll('.orbit-guides text,.cluster-guides text')){
+  for(const guide of document.querySelectorAll('.orbit-guides text,.cluster-guides text,.plane-underlay text')){
     const box=guide.getBBox();
     insert({x:panX+box.x*scale-4,y:panY+box.y*scale-3,width:box.width*scale+8,height:box.height*scale+6});
   }
   for(const group of groups){
-    const id=group.dataset.knowledgeNode,point=network.positions.get(id),r=Number(group.querySelector('.orb-body').getAttribute('r'))*(network.depths&&spatialLayout(network.layout)?network.depths.get(id)?.scale??1:1);
+    const id=group.dataset.knowledgeNode,point=network.positions.get(id),r=nodeRadius(group)*(network.depths&&spatialLayout(network.layout)?network.depths.get(id)?.scale??1:1);
     insert({id,x:(point[0]-r)*scale+panX,y:(point[1]-r)*scale+panY,width:r*2*scale,height:r*2*scale});
   }
   const overlap=(a,b)=>a.x<b.x+b.width&&a.x+a.width>b.x&&a.y<b.y+b.height&&a.y+a.height>b.y;
@@ -453,7 +469,7 @@ function placeNetworkLabels() {
   }
   for(const group of labels) {
     const id=group.dataset.knowledgeNode,[worldX,worldY]=network.positions.get(id),text=group.querySelector('text');
-    const r=Number(group.querySelector('.orb-body').getAttribute('r'))*(network.depths&&spatialLayout(network.layout)?network.depths.get(id)?.scale??1:1)*scale,gap=12;
+    const r=nodeRadius(group)*(network.depths&&spatialLayout(network.layout)?network.depths.get(id)?.scale??1:1)*scale,gap=12;
     const x=worldX*scale+panX,y=worldY*scale+panY;
     if(x < -96 || y < -64 || x > viewport.width+96 || y > viewport.height+64){
       group.classList.add('label-collision');continue;
@@ -461,7 +477,9 @@ function placeNetworkLabels() {
     const state = text.querySelector('.node-state-label');
     const metric=graphLabelMetrics.get(text);
     const width=metric.width,height=metric.full?32:16;
-    const extraSlots=network.layout==='atlas'?[]:[-2,2,-3,3,-4,4,-5,5,-6,6];
+    // On the map a label that cannot sit beside its own dot waits for hover:
+    // a name several rows away reads as belonging to a different record.
+    const extraSlots=network.layout==='atlas'||network.layout==='map'?[]:[-2,2,-3,3,-4,4,-5,5,-6,6];
     const candidates=[{x:r+gap,y:4},{x:-width/2,y:-r-gap},{x:-width/2,y:r+gap+height/2},{x:-r-gap-width,y:4},...extraSlots.map(step=>({x:r+gap,y:step*height}))];
     const cost=candidate=>{
       const box={x:x+candidate.x-3,y:y+candidate.y-13,width:width+6,height};
@@ -738,7 +756,7 @@ async function networkAction(action,key) {
     space.graphLayout=key;
     try{await save();}catch(error){space.graphLayout=previous;throw error;}
     if(space!==activeSpace())return;
-    render();document.querySelector('.map-view-select')?.focus({preventScroll:true});return;
+    render();document.querySelector('.map-view-switch .active')?.focus({preventScroll:true});return;
   }
   if(action==='appearance'){appearanceOpen=!appearanceOpen;network.settings=false;studio.inspector=false;render();return}
   if(action==='example')return openExampleSpace();
@@ -776,7 +794,8 @@ document.addEventListener('input',async e=>{
   if(e.target.id==='graph-size'){network.nodeScale=Number(e.target.value);const {nodes,links}=networkData();$('.network-nodes').innerHTML=nodes.map((n,index)=>networkNode(n,links,index)).join('');if(spatialLayout(network.layout))orderSpatialNodes($('.knowledge-svg'));applyNetworkCamera();highlightNetwork();persistNetwork()}
   if(e.target.id==='graph-edges'){network.edgeOpacity=Number(e.target.value);applyNetworkCamera();persistNetwork()}
 });
-document.addEventListener('change',e=>{if(e.target.matches('.map-view-select')){networkAction('layout',e.target.value).catch(report);}if(e.target.matches('.graph-angle')){networkAction('turn',e.target.value).catch(report);e.target.selectedIndex=0;}if(e.target.id==='graph-labels'){network.labels=e.target.value;applyNetworkCamera();persistNetwork()}});
+document.addEventListener('keydown',e=>{const group=e.target.closest?.('.map-view-switch');if(!group||!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;e.preventDefault();const items=[...group.querySelectorAll('[role=radio]')],i=items.indexOf(e.target),next=e.key==='Home'?0:e.key==='End'?items.length-1:(i+(e.key==='ArrowRight'?1:-1)+items.length)%items.length;networkAction('layout',items[next].dataset.key).catch(report);});
+document.addEventListener('change',e=>{if(e.target.matches('.graph-angle')){networkAction('turn',e.target.value).catch(report);e.target.selectedIndex=0;}if(e.target.id==='graph-labels'){network.labels=e.target.value;applyNetworkCamera();persistNetwork()}});
 document.addEventListener('pointerover',e=>{const node=e.target.closest('[data-knowledge-node]');if(node&&network.hovered!==node.dataset.knowledgeNode){network.hovered=node.dataset.knowledgeNode;highlightNetwork()}});
 document.addEventListener('pointerout',e=>{const node=e.target.closest('[data-knowledge-node]');if(node&&!node.contains(e.relatedTarget)){network.hovered=null;highlightNetwork()}});
 document.addEventListener('pointerdown',e=>{

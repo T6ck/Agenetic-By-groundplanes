@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Map is the new default graph view. Linked records settle into named areas, records with no links wait on a ground line underneath, and names no longer overlap. Hover a record to light its links. Trace map, Relief map and Clusters now open as Map.
+- Pick a view from one switch: Map, Flow, Orbit, 3D or Freeform. In 3D, turn and tilt with small buttons instead of a dropdown.
+- Files and Graph share one header, with Files and Graph side by side in the same switch.
+- Fixed an error that appeared every time Freeform opened, a duplicate Center button, a full stop that could wrap onto its own line after a link, and boxy row edges in Navigate.
+
 - Projects reopen at their files. Read two sources side by side, save a linked finding, or open Map to inspect connections.
 
 - Signal field groups connected records in the map. Rotate the strands, pull linked records, or open a source directly from the graph.

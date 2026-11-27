@@ -22,6 +22,8 @@ const browser=await chromium.launch({executablePath:process.env.CHROMIUM_EXECUTA
 const page=await browser.newPage({viewport:{width:1440,height:1000}});
 const errors=[];page.on('pageerror',error=>errors.push(error.message));
 const checks=[];
+const pickLayout=key=>page.locator('.map-view-switch [data-key="'+key+'"]').click();
+const turn=key=>page.locator('.orientation-control [data-key="'+key+'"]').click();
 async function check(name,run){await run();checks.push(name);console.log('PASS '+name);}
 try{
  await page.goto('http://127.0.0.1:'+server.address().port);
@@ -67,7 +69,7 @@ try{
      const row={records:count,links:links.length,path:stats(pathTimes)};
      if(count<=1200){
       data=freshProfile('Atlas benchmark');data.files=files;data.links=links;ensureStudio();
-      activeSpace().graphLayout='atlas';activeSpace().atlasCamera={x:460,y:350,scale:.9};
+      activeSpace().graphLayout='spatial';activeSpace().spatialCamera={x:460,y:350,scale:.9};
       network.space=null;network.signature='';network.focus=null;network.search='';render();
       await document.fonts.ready;await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
       const svg=document.querySelector('.knowledge-svg'),times=[],labels=[];
@@ -92,18 +94,18 @@ try{
  }
  await check('atlas rotates actual records, Flow preserves links, and Freeform retains manual positions',async()=>{
   const layout=async key=>{
-    await page.locator('.map-view-select').selectOption(key);
+    await pickLayout(key);
     await page.locator('.network-stage[data-layout="'+key+'"]').waitFor();
   };
-  await layout('atlas');
+  await layout('spatial');
   const ids=await page.locator('.knowledge-node').evaluateAll(nodes=>nodes.map(n=>n.dataset.knowledgeNode).sort());
   const count=await page.locator('.knowledge-edge').count();
   const first=page.locator('.knowledge-node').first(),before=await first.getAttribute('transform');
-  await page.getByRole('combobox',{name:'Map orientation'}).selectOption('right');
+  await turn('right');
   assert.notEqual(await first.getAttribute('transform'),before);
   await page.evaluate(()=>{appearance().theme='graphite';render();});
   await page.screenshot({path:out+'/atlas-dark.png'});
-  const angle=await page.evaluate(()=>activeSpace().atlasOrientation);
+  const angle=await page.evaluate(()=>activeSpace().spatialOrientation);
   await layout('flow');
   assert.equal(await page.locator('.flow-columns text').count(),3);
   assert.equal(await page.locator('path.knowledge-edge').count(),count);
@@ -123,17 +125,17 @@ try{
   await page.locator('[data-network="arrange"]').first().click();
   await page.locator('[data-network="undo-arrange"]').waitFor();
   const manual=await page.evaluate(()=>JSON.stringify(activeSpace().graphPositions));
-  await layout('atlas');
+  await layout('spatial');
   assert.ok(await page.evaluate(q=>network.orientation.every((v,i)=>Math.abs(v-q[i])<1e-10),angle));
   assert.deepEqual(await page.locator('.knowledge-node').evaluateAll(nodes=>nodes.map(n=>n.dataset.knowledgeNode).sort()),ids);
-  await page.reload();await page.locator('.reading-bar [data-reading=map]').click();await page.locator('.network-stage[data-layout=atlas]').waitFor();
+  await page.reload();await page.locator('.reading-bar [data-reading=map]').click();await page.locator('.network-stage[data-layout=spatial]').waitFor();
   assert.ok(await page.evaluate(q=>network.orientation.every((v,i)=>Math.abs(v-q[i])<1e-10),angle));
   assert.equal(await page.evaluate(()=>JSON.stringify(activeSpace().graphPositions)),manual);
   await page.evaluate(()=>{appearance().theme='porcelain';render()});
   await page.screenshot({path:out+'/atlas-light.png'});
  });
  await check('vertical drags, roll and record pulls move the visible geometry and keep real links attached',async()=>{
-  const angle=page.getByRole('combobox',{name:'Map orientation'});
+  const angle={selectOption:turn};
   const svg=page.locator('.knowledge-svg');
   const snapshot=()=>page.evaluate(()=>{
     const svg=document.querySelector('.knowledge-svg'),nodes={},edges={};
@@ -166,7 +168,7 @@ try{
   await page.keyboard.down('Shift');await page.mouse.move(x,y);await page.mouse.down();await page.mouse.move(x+30,y+21,{steps:4});await page.mouse.up();await page.keyboard.up('Shift');
   assert.deepEqual((await snapshot()).q,rolled.q);
   await angle.selectOption('reset');
-  await page.locator('.map-view-select').selectOption('spatial');await page.locator('.network-stage[data-layout=spatial]').waitFor();
+  await pickLayout('spatial');await page.locator('.network-stage[data-layout=spatial]').waitFor();
   await page.mouse.move(2,2);await saveShot('spatial-home');
   await angle.selectOption('up');await angle.selectOption('right');await saveShot('spatial-turned');
   const start=await snapshot();
@@ -204,23 +206,23 @@ try{
   await page.reload();await page.locator('.reading-bar [data-reading=map]').click();await page.locator('.network-stage[data-layout=spatial]').waitFor();
   const restored=await snapshot();
   assert.ok(restored.q.every((v,i)=>Math.abs(v-start.q[i])<1e-10));
-  await page.locator('.map-view-select').selectOption('atlas');await page.locator('.network-stage[data-layout=atlas]').waitFor();
+  await pickLayout('spatial');await page.locator('.network-stage[data-layout=spatial]').waitFor();
  });
- await check('all seven graph designs keep the same records, investigation and keyboard targets, and Orbit remembers its center',async()=>{
-  const layouts=page.locator('.map-view-select'),pane=page.locator('#investigation-pane');
+ await check('all five graph views keep the same records, investigation and keyboard targets, and Orbit remembers its center',async()=>{
+  const layouts=page.locator('.map-view-switch'),pane=page.locator('#investigation-pane');
   assert.equal(await layouts.count(),1);
   await page.locator('.invest-entry').click();
   const ids=async()=>page.locator('.knowledge-node').evaluateAll(ns=>ns.map(n=>n.dataset.knowledgeNode).sort());
   const original=await ids(),edges=await page.locator('.knowledge-edge').count();
-  for(const name of ['signal','spatial','clusters','orbit','flow','freeform','atlas']){
-    await page.locator('.map-view-select').selectOption(name);
+  for(const name of ['map','spatial','orbit','flow','freeform']){
+    await pickLayout(name);
     await page.locator('.network-stage[data-layout='+name+']').waitFor();
     assert.deepEqual(await ids(),original);assert.equal(await page.locator('.knowledge-edge').count(),edges);
     assert.ok(await page.locator('.invest-link').count()>0);
     assert.equal(await page.locator('.knowledge-node[tabindex="0"]').count(),1);
   }
   await pane.locator('[data-invest=close]').click();
-  await page.locator('.map-view-select').selectOption('orbit');
+  await pickLayout('orbit');
   const target=await page.locator('.atlas-record:not(.orbit-center)').first().getAttribute('data-knowledge-node');
   await page.locator('.knowledge-file-list [data-network=open][data-key="'+target+'"]').click();
   await page.locator('[data-network=orbit-root]').click();
@@ -228,8 +230,8 @@ try{
   await page.reload();await page.locator('.reading-bar [data-reading=map]').click();await page.locator('.network-stage[data-layout=orbit]').waitFor();
   assert.equal(await page.locator('.orbit-center').getAttribute('data-knowledge-node'),target);
   await page.setViewportSize({width:390,height:844});
-  for(const name of ['signal','spatial','clusters','orbit','flow','freeform','atlas']){
-    const control=page.locator('.map-view-select');await control.selectOption(name);
+  for(const name of ['map','spatial','orbit','flow','freeform']){
+    const control=page.locator('.map-view-switch');await pickLayout(name);
     await page.locator('.network-stage[data-layout='+name+']').waitFor();
     const box=await control.boundingBox();assert.ok(box.x>=0&&box.x+box.width<=391);
   }
@@ -262,12 +264,14 @@ try{
   }finally{await page.evaluate(async base=>{data=base;network.search='';await save();render();},baseline);}
  });
  await check('region membership lights actual records and stays aligned while rotating or framing on mobile',async()=>{
+  await pickLayout('spatial');await page.locator('.network-stage[data-layout=spatial]').waitFor();
   const pane=page.locator('#investigation-pane'),entry=page.locator('.invest-entry');
   await entry.click();await pane.locator('[data-invest=tab][data-key=regions]').click();
   const rows=await pane.locator('.region-members li').count();
   assert.ok(rows>0);assert.equal(await page.locator('.invest-hit').count(),rows);
-  const shape=page.locator('.invest-territory'),before=await shape.getAttribute('d');
-  await page.getByRole('combobox',{name:'Map orientation'}).selectOption('right');assert.notEqual(await shape.getAttribute('d'),before);
+  // The region outline was drawn only in the retired Relief map; in 3D the
+  // highlighted members themselves must survive a turn.
+  await turn('right');assert.equal(await page.locator('.invest-hit').count(),rows);
   await page.screenshot({path:out+'/investigation-region.png'});
   await page.setViewportSize({width:390,height:844});await pane.locator('[data-invest=frame]').click();
   assert.equal(await pane.isVisible(),false);assert.ok(await page.locator('.invest-hit').count()>0);
@@ -376,11 +380,11 @@ try{
   await page.locator('.depth-control [data-network=all]').click();
   await page.setViewportSize({width:390,height:844});
   await page.locator('[data-network=fit]').click();
-  await page.getByRole('combobox',{name:'Map orientation'}).selectOption('left');
-  await page.locator('.map-view-select').selectOption('flow');
+  await turn('left');
+  await pickLayout('flow');
   await page.locator('.network-stage[data-layout=flow]').waitFor();
-  await page.locator('.map-view-select').selectOption('atlas');
-  await page.locator('.network-stage[data-layout=atlas]').waitFor();
+  await pickLayout('spatial');
+  await page.locator('.network-stage[data-layout=spatial]').waitFor();
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
   assert.doesNotMatch(await page.locator('#toast').textContent(),/Cannot set properties/);
   await page.screenshot({path:out+'/atlas-mobile.png'});

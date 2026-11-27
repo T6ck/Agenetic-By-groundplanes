@@ -39,8 +39,13 @@ function readerPassageHtml(file,workspace=false) {
  for(const match of file.text.matchAll(/\[\[([^\]\n]+)\]\]/g)){
   const [ref,alias]=match[1].split('|'),id=notes.get(fileNameKey(ref.split('#')[0]));
   if(!id||id===file.id)continue;
-  html+=esc(file.text.slice(offset,match.index))+(workspace?'<button class="reader-reference" data-reading="open" data-id="'+esc(id)+'">'+esc(alias||ref)+'</button>':studioButton('focus',esc(alias||ref),id,'class="reader-reference"'));
-  offset=match.index+match[0].length;
+  // Keep punctuation that follows a link on the same line as the link.
+  // A button is an atomic box, so without this "[[Note]]." could wrap and
+  // start the next line with a lone full stop.
+  const end=match.index+match[0].length,tail=/^[.,;:!?)\]]+/.exec(file.text.slice(end))?.[0]||'';
+  const button=workspace?'<button class="reader-reference" data-reading="open" data-id="'+esc(id)+'">'+esc(alias||ref)+'</button>':studioButton('focus',esc(alias||ref),id,'class="reader-reference"');
+  html+=esc(file.text.slice(offset,match.index))+(tail?'<span class="reference-glue">'+button+esc(tail)+'</span>':button);
+  offset=end+tail.length;
  }
  return html+esc(file.text.slice(offset));
 }

@@ -82,8 +82,7 @@ try{
   }
   async function layout(name){
     if(await page.locator('.network-stage').getAttribute('data-layout')!==name){
-      const control=page.locator('.map-view-select');
-      await control.selectOption(name,{timeout:6000});
+      await page.locator('.map-view-switch [data-key="'+name+'"]').click({timeout:6000});
     }
     await page.locator('.network-stage[data-layout="'+name+'"]').waitFor();
     await page.locator('[data-network=fit]').first().click();
@@ -92,28 +91,14 @@ try{
   }
   async function theme(name){await page.evaluate(value=>{appearance().theme=value;render();},name);await settle();}
   await theme('porcelain');
-  if(wants('signal-field')){await theme('linen');await layout('signal');await screenshot('signal-field');}
-  if(wants('atlas')||wants('atlas-graphite')){
-    await theme('linen');await layout('atlas');
-    if(wants('atlas'))await screenshot('atlas');
-    if(wants('atlas-graphite')){
-      await theme('graphite');await screenshot('atlas-graphite');await theme('porcelain');
-    }
+  if(wants('map')||wants('map-graphite')){
+    await layout('map');
+    if(wants('map'))await screenshot('map');
+    if(wants('map-graphite')){await theme('graphite');await screenshot('map-graphite');await theme('porcelain');}
   }
-  for(const name of ['flow','orbit','clusters','freeform']){
+  for(const name of ['flow','orbit','freeform']){
     if(!wants(name))continue;
     await layout(name);
-    if(name==='clusters'){
-      const gap=await page.evaluate(()=>{
-        const heading=document.querySelector('.layout-hint').getBoundingClientRect();
-        const top=Math.min(...Array.from(document.querySelectorAll('.cluster-guides text'),el=>el.getBoundingClientRect().top));
-        return Math.max(0,Math.ceil(heading.bottom+18-top));
-      });
-      if(gap){
-        const svg=await page.locator('.knowledge-svg').boundingBox(),x=svg.x+svg.width*.92,y=svg.y+svg.height*.55;
-        await page.mouse.move(x,y);await page.mouse.down();await page.mouse.move(x,y+gap,{steps:5});await page.mouse.up();
-      }
-    }
     if(name==='freeform'){
       await page.locator('[data-network=arrange]').first().click();
       await page.locator('[data-network=undo-arrange]').first().waitFor();
@@ -122,12 +107,15 @@ try{
     await screenshot(name);
   }
   if(wants('paths')){
-    await layout('flow');
+    await layout('map');
     await page.locator('.invest-entry').click();
     await page.locator('#invest-from').selectOption({label:'Project brief'});
     await page.locator('#invest-to').selectOption({label:'Compare interview findings'});
     assert.ok(await page.locator('.invest-link').count()>=2);
-    await page.locator('[data-invest=frame]').click();await screenshot('paths');
+    await page.locator('[data-invest=frame]').click();
+    // Framing fits the route tightly; one step out keeps the neighbouring
+    // areas in view and the route clear of the heading.
+    await page.locator('[data-network=zoom-out]').first().click();await screenshot('paths');
     await page.locator('[data-invest=close]').click();
   }
   if(wants('research')||wants('sources')||wants('review')){
@@ -167,7 +155,7 @@ try{
       await form.locator('[type=submit]').click();
       await form.waitFor({state:'hidden'});
       await page.evaluate(()=>{page='Graph';render();});
-      await layout('atlas');
+      await layout('map');
       await page.locator('.invest-entry').click();
       await page.locator('[data-invest=tab][data-key=evidence]').click();
       const id=await page.evaluate(statement=>data.files.find(f=>f.research?.statement===statement).id,claim);

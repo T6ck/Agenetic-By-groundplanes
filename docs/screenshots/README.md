@@ -2,15 +2,15 @@
 
 Select a screenshot to open the full-size capture.
 
-| Atlas in Plotter | Video edit with captions | Blueprint palette editor |
+| Map | Video edit with captions | Blueprint palette editor |
 | --- | --- | --- |
-| [![Connected record groups drawn as contours](gallery/atlas.webp)](gallery/atlas.webp) | [![Timed dialogue beside the picture-lock workflow](gallery/cut-room.webp)](gallery/cut-room.webp) | [![Editing the Blueprint palette](gallery/palette.webp)](gallery/palette.webp) |
+| [![Linked records in named areas, with unlinked records on a ground line](gallery/map.webp)](gallery/map.webp) | [![Timed dialogue beside the picture-lock workflow](gallery/cut-room.webp)](gallery/cut-room.webp) | [![Editing the Blueprint palette](gallery/palette.webp)](gallery/palette.webp) |
 
 ## Other layouts
 
-| Clusters | Orbit |
+| Map in Graphite | Orbit |
 | --- | --- |
-| [![Records grouped around their hubs](gallery/clusters.webp)](gallery/clusters.webp) | [![Records arranged by distance from the center](gallery/orbit.webp)](gallery/orbit.webp) |
+| [![The same map in the dark Graphite palette](gallery/map-graphite.webp)](gallery/map-graphite.webp) | [![Records arranged by distance from the center](gallery/orbit.webp)](gallery/orbit.webp) |
 | **Flow** | **Freeform** |
 | [![Sources, agents, and tasks in columns](gallery/flow.webp)](gallery/flow.webp) | [![Manually positioned records](gallery/freeform.webp)](gallery/freeform.webp) |
 
